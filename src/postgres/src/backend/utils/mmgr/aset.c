@@ -47,6 +47,7 @@
 #include "postgres.h"
 
 #include "utils/memdebug.h"
+#include "utils/memtrack.h"
 #include "utils/memutils.h"
 
 /* Define this to detail debug alloc information */
@@ -490,6 +491,8 @@ AllocSetContextCreateExtended(MemoryContext parent,
 						   name)));
 	}
 
+	YbPgMemAddConsumption(firstBlockSize);
+
 	/*
 	 * Avoid writing code that can fail between here and MemoryContextCreate;
 	 * we'd leak the header/initial block if we ereport in this stretch.
@@ -608,6 +611,8 @@ AllocSetReset(MemoryContext context)
 		else
 		{
 			/* Normal case, release the block */
+			YbPgMemSubConsumption(block->endptr - ((char *) block));
+
 #ifdef CLOBBER_FREED_MEMORY
 			wipe_mem(block, block->freeptr - ((char *) block));
 #endif
@@ -668,6 +673,10 @@ AllocSetDelete(MemoryContext context)
 				freelist->first_free = (AllocSetContext *) oldset->header.nextchild;
 				freelist->num_free--;
 
+				YbPgMemSubConsumption(
+					((AllocSetContext *) oldset)->keeper->endptr -
+					((char *) oldset));
+
 				/* All that remains is to free the header/initial block */
 				free(oldset);
 			}
@@ -692,11 +701,16 @@ AllocSetDelete(MemoryContext context)
 #endif
 
 		if (block != set->keeper)
+		{
+			YbPgMemSubConsumption(block->endptr - ((char *) block));
 			free(block);
+		}
 
 		block = next;
 	}
 
+	YbPgMemSubConsumption(((AllocSetContext *) set)->keeper->endptr -
+						  ((char *) set));
 	/* Finally, free the context header, including the keeper block */
 	free(set);
 }
@@ -737,6 +751,9 @@ AllocSetAlloc(MemoryContext context, Size size)
 		block = (AllocBlock) malloc(blksize);
 		if (block == NULL)
 			return NULL;
+
+		YbPgMemAddConsumption(blksize);
+
 		block->aset = set;
 		block->freeptr = block->endptr = ((char *) block) + blksize;
 
@@ -932,6 +949,8 @@ AllocSetAlloc(MemoryContext context, Size size)
 		if (block == NULL)
 			return NULL;
 
+		YbPgMemAddConsumption(blksize);
+
 		block->aset = set;
 		block->freeptr = ((char *) block) + ALLOC_BLOCKHDRSZ;
 		block->endptr = ((char *) block) + blksize;
@@ -1035,6 +1054,8 @@ AllocSetFree(MemoryContext context, void *pointer)
 #ifdef CLOBBER_FREED_MEMORY
 		wipe_mem(block, block->freeptr - ((char *) block));
 #endif
+
+		YbPgMemSubConsumption(block->endptr - ((char *) block));
 		free(block);
 	}
 	else
@@ -1148,6 +1169,7 @@ AllocSetRealloc(MemoryContext context, void *pointer, Size size)
 		AllocBlock	block = (AllocBlock) (((char *) chunk) - ALLOC_BLOCKHDRSZ);
 		Size		chksize;
 		Size		blksize;
+		Size		oldsize = block->endptr - ((char *) block);
 
 		/*
 		 * Try to verify that we have a sane block pointer: it should
@@ -1171,6 +1193,7 @@ AllocSetRealloc(MemoryContext context, void *pointer, Size size)
 			return NULL;
 		}
 		block->freeptr = block->endptr = ((char *) block) + blksize;
+		YbPgMemAddConsumption(blksize - oldsize);
 
 		/* Update pointers since block has likely been moved */
 		chunk = (AllocChunk) (((char *) block) + ALLOC_BLOCKHDRSZ);

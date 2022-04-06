@@ -72,6 +72,7 @@
 #include "utils/builtins.h"
 #include "utils/datum.h"
 #include "utils/lsyscache.h"
+#include "utils/memtrack.h"
 #include "utils/pg_locale.h"
 #include "utils/rel.h"
 #include "utils/spccache.h"
@@ -531,6 +532,7 @@ YBInitPostgresBackend(
 		callbacks.GetCurrentYbMemctx = &GetCurrentYbMemctx;
 		callbacks.GetDebugQueryString = &GetDebugQueryString;
 		callbacks.WriteExecOutParam = &YbWriteExecOutParam;
+		callbacks.YbPgMemUpdateMax = &YbPgMemUpdateMax;
 		YBCInitPgGate(type_table, count, callbacks);
 		YBCInstallTxnDdlHook();
 

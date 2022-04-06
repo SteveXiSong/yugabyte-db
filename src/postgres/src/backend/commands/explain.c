@@ -34,13 +34,13 @@
 #include "utils/builtins.h"
 #include "utils/json.h"
 #include "utils/lsyscache.h"
+#include "utils/memtrack.h"
 #include "utils/rel.h"
 #include "utils/ruleutils.h"
 #include "utils/snapmgr.h"
 #include "utils/tuplesort.h"
 #include "utils/typcache.h"
 #include "utils/xml.h"
-
 
 /* Hook for plugins to get control in ExplainOneQuery() */
 ExplainOneQuery_hook_type ExplainOneQuery_hook = NULL;
@@ -54,6 +54,8 @@ explain_get_index_name_hook_type explain_get_index_name_hook = NULL;
 #define X_CLOSING 1
 #define X_CLOSE_IMMEDIATE 2
 #define X_NOWHITESPACE 4
+
+#define CEILING_K(s) ((s + 1023) / 1024)
 
 static void ExplainOneQuery(Query *query, int cursorOptions,
 				IntoClause *into, ExplainState *es,
@@ -133,8 +135,12 @@ static void ExplainXMLTag(const char *tagname, int flags, ExplainState *es);
 static void ExplainJSONLineEnding(ExplainState *es);
 static void ExplainYAMLLineStarting(ExplainState *es);
 static void escape_yaml(StringInfo buf, const char *str);
+static void ConvertToReadableBytes(Size *bytes, const char **unit);
+static void appendPgMemInfo(ExplainState *es, Size peakMem);
 
-
+static const char *KIB = "KiB";
+static const char *MIB = "MiB";
+static const char *GIB = "GiB";
 
 /*
  * ExplainQuery -
@@ -521,6 +527,8 @@ ExplainOnePlan(PlannedStmt *plannedstmt, IntoClause *into, ExplainState *es,
 	/* call ExecutorStart to prepare the plan for execution */
 	ExecutorStart(queryDesc, eflags);
 
+	int64 peakMem = 0;
+
 	/* Execute the plan for statistics if asked for */
 	if (es->analyze)
 	{
@@ -534,6 +542,9 @@ ExplainOnePlan(PlannedStmt *plannedstmt, IntoClause *into, ExplainState *es,
 
 		/* run the plan */
 		ExecutorRun(queryDesc, dir, 0L, true);
+
+		/* take a snapshot on the max PG memory consumption */
+		peakMem = PgMemTracker.stmt_max_mem_bytes;
 
 		/* run cleanup too */
 		ExecutorFinish(queryDesc);
@@ -592,8 +603,13 @@ ExplainOnePlan(PlannedStmt *plannedstmt, IntoClause *into, ExplainState *es,
 	 * the output).  By default, ANALYZE sets SUMMARY to true.
 	 */
 	if (es->summary && es->analyze)
+	{
 		ExplainPropertyFloat("Execution Time", "ms", 1000.0 * totaltime, 3,
 							 es);
+
+		if (IsYugaByteEnabled())
+			appendPgMemInfo(es, peakMem);
+	}
 
 	ExplainCloseGroup("Query", NULL, true, es);
 }
@@ -3863,4 +3879,48 @@ static void
 escape_yaml(StringInfo buf, const char *str)
 {
 	escape_json(buf, str);
+}
+
+/*
+ * Append YbPgMemTracker related info to EXPLAIN output,
+ * currently only the max memory info.
+ */
+static void
+appendPgMemInfo(ExplainState *es, Size peakMem)
+{
+	const char *unit;
+	ConvertToReadableBytes(&peakMem, &unit);
+	appendStringInfo(es->str, "Maximum actual memory usage: %lu %s\n", peakMem,
+					 unit);
+}
+
+/*
+ * Given a input size in bytes, return size in readable (up to GiB)
+ * unit, rounded to the ceiling integral part.
+ */
+static void
+ConvertToReadableBytes(Size *bytes, const char **unit)
+{
+	Size rawbytes = *bytes;
+
+	*unit = KIB;
+	// < 1MB
+	if (rawbytes < 1024 * 1024)
+	{
+		*bytes = CEILING_K(rawbytes);
+		return;
+	}
+
+	*unit = MIB;
+	rawbytes /= 1024;
+	// < 1GB
+	if (rawbytes < 1024 * 1024)
+	{
+		*bytes = CEILING_K(rawbytes);
+		return;
+	}
+
+	rawbytes /= 1024;
+	*unit  = GIB;
+	*bytes = CEILING_K(rawbytes);
 }

@@ -49,6 +49,7 @@ YBCStatus YBCPgInitSession(const YBCPgEnv pg_env, const char *database_name);
 YBCPgMemctx YBCPgCreateMemctx();
 YBCStatus YBCPgDestroyMemctx(YBCPgMemctx memctx);
 YBCStatus YBCPgResetMemctx(YBCPgMemctx memctx);
+
 void YBCPgDeleteStatement(YBCPgStatement handle);
 
 // Invalidate the sessions table cache.
@@ -69,6 +70,8 @@ YBCStatus YBCGetSharedAuthKey(uint64_t* auth_key);
 
 // Get access to callbacks.
 const YBCPgCallbacks* YBCGetPgCallbacks();
+
+YBCStatus YBCGetPgggateHeapConsumption(int64_t *consumption);
 
 //--------------------------------------------------------------------------------------------------
 // DDL Statements

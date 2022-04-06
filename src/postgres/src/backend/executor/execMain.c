@@ -59,6 +59,7 @@
 #include "tcop/utility.h"
 #include "utils/acl.h"
 #include "utils/lsyscache.h"
+#include "utils/memtrack.h"
 #include "utils/memutils.h"
 #include "utils/partcache.h"
 #include "utils/rls.h"
@@ -151,6 +152,8 @@ ExecutorStart(QueryDesc *queryDesc, int eflags)
 void
 standard_ExecutorStart(QueryDesc *queryDesc, int eflags)
 {
+	YbPgMemResetStmtConsumption();
+
 	EState	   *estate;
 	MemoryContext oldcontext;
 

@@ -109,9 +109,10 @@ DEFINE_bool(mem_tracker_log_stack_trace, false,
             "Enable logging of stack traces on memory tracker consume/release operations. "
             "Only takes effect if mem_tracker_logging is also enabled.");
 
-DEFINE_int64(mem_tracker_update_consumption_interval_us, 2000000,
-             "Interval that is used to update memory consumption from external source. "
-             "For instance from tcmalloc statistics.");
+DEFINE_int64(
+    mem_tracker_update_consumption_interval_us, 2000000,
+    "Interval that is used to update memory consumption from external source. "
+    "For instance from tcmalloc statistics.");
 
 DEFINE_int64(mem_tracker_tcmalloc_gc_release_bytes, -1,
              "When the total amount of memory from calls to Release() since the last GC exceeds "
@@ -491,6 +492,12 @@ bool MemTracker::UpdateConsumption(bool force) {
   if (poll_children_consumption_functors_) {
     poll_children_consumption_functors_();
   }
+
+  if (update_max_mem_functor_) {
+    update_max_mem_functor_();
+  }
+
+  force = true;
 
   if (consumption_functor_) {
     auto now = CoarseMonoClock::now();

@@ -33,6 +33,9 @@ import org.yb.minicluster.MiniYBCluster;
 public class TestYsqlMetrics extends BasePgSQLTest {
   private static final Logger LOG = LoggerFactory.getLogger(TestYsqlMetrics.class);
 
+  private static final int KBytes_1 = 1024;
+  private static final int MBytes_1 = KBytes_1 * KBytes_1;
+
   @Test
   public void testMetrics() throws Exception {
     Statement statement = connection.createStatement();
@@ -420,7 +423,8 @@ public class TestYsqlMetrics extends BasePgSQLTest {
       AggregatedValue stat = getStatementStat(query);
       assertEquals(1, stat.count);
       while(result.next()) {
-        if(result.isLast()) {
+        final String row = result.getString(1);
+        if(row.contains("Execution Time")) {
           double query_time = Double.parseDouble(result.getString(1).replaceAll("[^\\d.]", ""));
           // As stat.total_time indicates total time of EXPLAIN query,
           // actual query total time is a little bit less.
@@ -429,6 +433,99 @@ public class TestYsqlMetrics extends BasePgSQLTest {
         }
       }
     }
+  }
+
+  @Test
+  public void testExplainMaxMemory() throws Exception {
+    try (Statement statement = connection.createStatement()) {
+      statement.execute("CREATE TABLE tst (c1 INT);");
+      statement.execute("INSERT INTO tst SELECT s FROM generate_series(1, 1000000) s;");
+
+      // Verify that the absolute and relative values of the max memory output are within
+      // expectation.
+      {
+        final int maxMem_1 = runExplain(statement, 1);
+        validateMaxMemory(maxMem_1, 10 * KBytes_1, 5 * MBytes_1);
+        final int maxMem_1K = runExplain(statement, 1000);
+        validateMaxMemory(maxMem_1K, 100*KBytes_1, 5 *MBytes_1);
+        final int maxMem_1M = runExplain(statement, 1000 * 1000);
+        validateMaxMemory(maxMem_1M, 10 * MBytes_1, 200 * MBytes_1);
+        assertTrue(maxMem_1 < maxMem_1K && maxMem_1K < maxMem_1M);
+      }
+
+      // Verify that there is no memory leakage in the tracking system.
+      // If the tracking logic is not accurate and has errors, it will accumulate and shows in the
+      // output.
+      {
+        final String simpleQuery = buildExplainQuery(1000);
+        final ResultSet resultFromSimple = statement.executeQuery(simpleQuery);
+        final int maxMemSimpleStart = findMaxMemInExplain(resultFromSimple);
+        validateMaxMemory(maxMemSimpleStart, 100 * KBytes_1, 5 * MBytes_1);
+
+        final String query = buildExplainQuery(1000);
+        int loopN = 100;
+        while (loopN-- > 0) {
+          statement.executeQuery(query);
+        }
+
+        final ResultSet resultEnd = statement.executeQuery(simpleQuery);
+        final int maxMemSimpleEnd = findMaxMemInExplain(resultEnd);
+        assertEquals(maxMemSimpleEnd, maxMemSimpleStart);
+      }
+    }
+  }
+
+  /**
+   * Validate the EXPLAIN output, and return maximum memory consumption found.
+   **/
+  private int runExplain(Statement statement, final int limit) throws Exception {
+    final String explainQuery = buildExplainQuery(limit);
+    final ResultSet result = statement.executeQuery(explainQuery);
+    return findMaxMemInExplain(result);
+  }
+
+  /**
+   * Validate max memory in bytes.
+   */
+  private void validateMaxMemory(final int maxMem, final int expLower, final int expUpper) {
+    assertTrue(maxMem >= expLower && maxMem <= expUpper);
+  }
+
+  private final String buildExplainQuery(final int limit) {
+    return "explain analyze select m1 from "
+            + "(select max(c1) as m1 from "
+            + "(select * from tst limit "
+            + limit
+            + " ) as t0 "
+            + "group by c1) as t1 "
+            + "order by m1;";
+  }
+
+  /**
+   * Find the max memory in the EXPLAIN output in bytes. Throws exception if there is no max mem found.
+   */
+  private int findMaxMemInExplain(final ResultSet result) throws Exception {
+    while(result.next()) {
+      final String row = result.getString(1);
+      if (row.contains("Maximum actual memory usage")) {
+        final String[] tks = row.split(" ");
+        int maxMem = Integer.valueOf(tks[tks.length - 2]);
+
+        final String memUnit = tks[tks.length - 1];
+        switch (memUnit) {
+          case "GiB":
+            maxMem *= 1024;
+          case "MiB":
+            maxMem *= 1024;
+          case "KiB":
+            maxMem *= 1024;
+        }
+
+        return maxMem;
+      }
+    }
+
+    throw new Exception("No max memory consumption found in the EXPLAIN output.");
   }
 
   private void testStatement(Statement statement,

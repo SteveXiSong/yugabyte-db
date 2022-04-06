@@ -40,9 +40,10 @@
 
 #include "lib/ilist.h"
 #include "utils/memdebug.h"
+#include "utils/memtrack.h"
 #include "utils/memutils.h"
 
-
+#define Generation_CONTEXTSZ	MAXALIGN(sizeof(GenerationContext))
 #define Generation_BLOCKHDRSZ	MAXALIGN(sizeof(GenerationBlock))
 #define Generation_CHUNKHDRSZ	sizeof(GenerationChunk)
 
@@ -240,7 +241,7 @@ GenerationContextCreate(MemoryContext parent,
 	 * freeing the first generation of allocations.
 	 */
 
-	set = (GenerationContext *) malloc(MAXALIGN(sizeof(GenerationContext)));
+	set = (GenerationContext *) malloc(Generation_CONTEXTSZ);
 	if (set == NULL)
 	{
 		MemoryContextStats(TopMemoryContext);
@@ -250,6 +251,8 @@ GenerationContextCreate(MemoryContext parent,
 				 errdetail("Failed while creating memory context \"%s\".",
 						   name)));
 	}
+
+	YbPgMemAddConsumption(Generation_CONTEXTSZ);
 
 	/*
 	 * Avoid writing code that can fail between here and MemoryContextCreate;
@@ -301,6 +304,8 @@ GenerationReset(MemoryContext context)
 		wipe_mem(block, block->blksize);
 #endif
 
+		YbPgMemSubConsumption(block->endptr - ((char *) block));
+
 		free(block);
 	}
 
@@ -318,6 +323,9 @@ GenerationDelete(MemoryContext context)
 {
 	/* Reset to release all the GenerationBlocks */
 	GenerationReset(context);
+
+	YbPgMemSubConsumption(Generation_CONTEXTSZ);
+
 	/* And free the context header */
 	free(context);
 }
@@ -351,6 +359,8 @@ GenerationAlloc(MemoryContext context, Size size)
 		block = (GenerationBlock *) malloc(blksize);
 		if (block == NULL)
 			return NULL;
+
+		YbPgMemAddConsumption(blksize);
 
 		/* block with a single (used) chunk */
 		block->blksize = blksize;
@@ -406,6 +416,8 @@ GenerationAlloc(MemoryContext context, Size size)
 
 		if (block == NULL)
 			return NULL;
+
+		YbPgMemAddConsumption(blksize);
 
 		block->blksize = blksize;
 		block->nchunks = 0;
@@ -522,6 +534,7 @@ GenerationFree(MemoryContext context, void *pointer)
 	if (set->block == block)
 		set->block = NULL;
 
+	YbPgMemSubConsumption(block->blksize);
 	free(block);
 }
 
