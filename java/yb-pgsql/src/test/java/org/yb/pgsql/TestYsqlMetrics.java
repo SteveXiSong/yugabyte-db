@@ -439,17 +439,34 @@ public class TestYsqlMetrics extends BasePgSQLTest {
   public void testExplainMaxMemory() throws Exception {
     try (Statement statement = connection.createStatement()) {
       statement.execute("CREATE TABLE tst (c1 INT);");
-      statement.execute("INSERT INTO tst SELECT s FROM generate_series(1, 1000000) s;");
+      statement.execute("PREPARE demo(int) AS "
+        + "SELECT m1 FROM "
+        + "(SELECT MAX(c1) AS m1 FROM "
+        + "(SELECT * FROM tst LIMIT $1 "
+        + ") AS t0 "
+        + "GROUP BY c1) AS t1 "
+        + "ORDER BY m1;"
+      );
+
+      // Verify INSERT output
+      {
+        final boolean hasRs = statement.execute(
+                "EXPLAIN ANALYZE INSERT INTO tst SELECT s FROM generate_series(1, 1000000) s;");
+        assertTrue(hasRs);
+        final ResultSet insertResult = statement.getResultSet();
+        final long maxMemInsert = findMaxMemInExplain(insertResult);
+        validateMaxMemory(maxMemInsert, 40 * MBytes, 60 * MBytes);
+      }
 
       // Verify that the absolute and relative values of the max memory output are within
       // expectation.
       {
-        final int maxMem_1 = runExplain(statement, 1);
-        validateMaxMemory(maxMem_1, 10 * KBytes, 5 * MBytes);
-        final int maxMem_1K = runExplain(statement, 1000);
-        validateMaxMemory(maxMem_1K, 100* KBytes, 5 * MBytes);
-        final int maxMem_1M = runExplain(statement, 1000 * 1000);
-        validateMaxMemory(maxMem_1M, 10 * MBytes, 200 * MBytes);
+        final long maxMem_1 =
+          verifyExplainQueryMaxMem(statement, 1, 10 * KBytes, 5 * MBytes);
+        final long maxMem_1K =
+          verifyExplainQueryMaxMem(statement, 1000, 100 * KBytes, 5 * MBytes);
+        final long maxMem_1M =
+          verifyExplainQueryMaxMem(statement, 1000 * 1000, 10 * MBytes, 200 * MBytes);
         assertTrue(maxMem_1 < maxMem_1K && maxMem_1K < maxMem_1M);
       }
 
@@ -457,29 +474,65 @@ public class TestYsqlMetrics extends BasePgSQLTest {
       // If the tracking logic is not accurate and has errors, it will accumulate and shows in the
       // output.
       {
-        final String simpleQuery = buildExplainQuery(1000);
-        final ResultSet resultFromSimple = statement.executeQuery(simpleQuery);
-        final int maxMemSimpleStart = findMaxMemInExplain(resultFromSimple);
-        validateMaxMemory(maxMemSimpleStart, 100 * KBytes, 5 * MBytes);
+        final long maxMemSimpleStart =
+          verifyExplainQueryMaxMem(statement, 1000, 100 * KBytes, 5 * MBytes);
 
-        final String query = buildExplainQuery(1000);
+        final String query = buildExplainDemoQuery(1000);
         int loopN = 100;
         while (loopN-- > 0) {
           statement.executeQuery(query);
         }
 
-        final ResultSet resultEnd = statement.executeQuery(simpleQuery);
-        final int maxMemSimpleEnd = findMaxMemInExplain(resultEnd);
+        final long maxMemSimpleEnd =
+          verifyExplainQueryMaxMem(statement, 1000, 100 * KBytes, 5 * MBytes);
         assertEquals(maxMemSimpleEnd, maxMemSimpleStart);
       }
+
+      verifyStatementMaxMem(statement,
+        "EXPLAIN ANALYZE UPDATE tst SET c1 = c1 + 1 WHERE c1 < 1000;",
+        5 * KBytes, 50 * KBytes);
+
+      verifyStatementMaxMem(statement,
+        "EXPLAIN ANALYZE DELETE FROM tst WHERE c1 < 1000;",
+        5 * KBytes, 50 * KBytes);
+
+      // Sanity check for DECLARE
+      statement.execute("BEGIN;");
+      statement.execute(
+        "EXPLAIN ANALYZE DECLARE decl CURSOR FOR SELECT * FROM tst limit 1000;");
+      statement.execute("END;");
+
+      // Sanity check for VALUES
+      statement.execute("EXPLAIN ANALYZE VALUES (1), (2), (3);");
+
+      /**
+       * TODO Add sanity tests for CREATE TABLE AS and CREATE MATERIALIZED VIEW AS. Since YB 2.8,
+       * there is a regression these statements no longer work.
+       */
     }
+  }
+
+  private void verifyStatementMaxMem(final Statement statement, final String query,
+                                     final int expLower, final int expUpper) throws Exception {
+    final boolean hasRs = statement.execute(query);
+    assertTrue(hasRs);
+    final ResultSet insertResult = statement.getResultSet();
+    final long maxMemInsert = findMaxMemInExplain(insertResult);
+    validateMaxMemory(maxMemInsert, expLower, expUpper);
+  }
+
+  private long verifyExplainQueryMaxMem(final Statement statement, final int limit,
+                                        final int expLower, final int expUpper) throws Exception {
+    final long maxMem = runExplain(statement, limit);
+    validateMaxMemory(maxMem, expLower, expUpper);
+    return maxMem;
   }
 
   /**
    * Validate the EXPLAIN output, and return maximum memory consumption found.
    **/
-  private int runExplain(Statement statement, final int limit) throws Exception {
-    final String explainQuery = buildExplainQuery(limit);
+  private long runExplain(Statement statement, final int limit) throws Exception {
+    final String explainQuery = buildExplainDemoQuery(limit);
     final ResultSet result = statement.executeQuery(explainQuery);
     return findMaxMemInExplain(result);
   }
@@ -487,30 +540,25 @@ public class TestYsqlMetrics extends BasePgSQLTest {
   /**
    * Validate max memory in bytes.
    */
-  private void validateMaxMemory(final int maxMem, final int expLower, final int expUpper) {
+  private void validateMaxMemory(final long maxMem, final long expLower, final long expUpper) {
+    assertTrue(expLower <= expUpper);
     assertTrue(maxMem >= expLower && maxMem <= expUpper);
   }
 
-  private final String buildExplainQuery(final int limit) {
-    return "explain analyze select m1 from "
-            + "(select max(c1) as m1 from "
-            + "(select * from tst limit "
-            + limit
-            + " ) as t0 "
-            + "group by c1) as t1 "
-            + "order by m1;";
+  private final String buildExplainDemoQuery(final int limit) {
+    return "explain analyze execute demo(" + limit + ");";
   }
 
   /**
    * Find the max memory in the EXPLAIN output in bytes. Throws exception if there is no max mem
    * found.
    */
-  private int findMaxMemInExplain(final ResultSet result) throws Exception {
+  private long findMaxMemInExplain(final ResultSet result) throws Exception {
     while(result.next()) {
       final String row = result.getString(1);
       if (row.contains("Maximum memory usage")) {
         final String[] tks = row.split(" ");
-        int maxMem = Integer.valueOf(tks[tks.length - 2]);
+        long maxMem = Long.valueOf(tks[tks.length - 2]);
 
         final String memUnit = tks[tks.length - 1];
         switch (memUnit) {
