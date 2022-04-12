@@ -33,8 +33,8 @@ import org.yb.minicluster.MiniYBCluster;
 public class TestYsqlMetrics extends BasePgSQLTest {
   private static final Logger LOG = LoggerFactory.getLogger(TestYsqlMetrics.class);
 
-  private static final int KBytes_1 = 1024;
-  private static final int MBytes_1 = KBytes_1 * KBytes_1;
+  private static final int KBytes = 1024;
+  private static final int MBytes = KBytes * KBytes;
 
   @Test
   public void testMetrics() throws Exception {
@@ -445,11 +445,11 @@ public class TestYsqlMetrics extends BasePgSQLTest {
       // expectation.
       {
         final int maxMem_1 = runExplain(statement, 1);
-        validateMaxMemory(maxMem_1, 10 * KBytes_1, 5 * MBytes_1);
+        validateMaxMemory(maxMem_1, 10 * KBytes, 5 * MBytes);
         final int maxMem_1K = runExplain(statement, 1000);
-        validateMaxMemory(maxMem_1K, 100*KBytes_1, 5 *MBytes_1);
+        validateMaxMemory(maxMem_1K, 100* KBytes, 5 * MBytes);
         final int maxMem_1M = runExplain(statement, 1000 * 1000);
-        validateMaxMemory(maxMem_1M, 10 * MBytes_1, 200 * MBytes_1);
+        validateMaxMemory(maxMem_1M, 10 * MBytes, 200 * MBytes);
         assertTrue(maxMem_1 < maxMem_1K && maxMem_1K < maxMem_1M);
       }
 
@@ -460,7 +460,7 @@ public class TestYsqlMetrics extends BasePgSQLTest {
         final String simpleQuery = buildExplainQuery(1000);
         final ResultSet resultFromSimple = statement.executeQuery(simpleQuery);
         final int maxMemSimpleStart = findMaxMemInExplain(resultFromSimple);
-        validateMaxMemory(maxMemSimpleStart, 100 * KBytes_1, 5 * MBytes_1);
+        validateMaxMemory(maxMemSimpleStart, 100 * KBytes, 5 * MBytes);
 
         final String query = buildExplainQuery(1000);
         int loopN = 100;
@@ -502,12 +502,13 @@ public class TestYsqlMetrics extends BasePgSQLTest {
   }
 
   /**
-   * Find the max memory in the EXPLAIN output in bytes. Throws exception if there is no max mem found.
+   * Find the max memory in the EXPLAIN output in bytes. Throws exception if there is no max mem
+   * found.
    */
   private int findMaxMemInExplain(final ResultSet result) throws Exception {
     while(result.next()) {
       final String row = result.getString(1);
-      if (row.contains("Maximum actual memory usage")) {
+      if (row.contains("Maximum memory usage")) {
         final String[] tks = row.split(" ");
         int maxMem = Integer.valueOf(tks[tks.length - 2]);
 

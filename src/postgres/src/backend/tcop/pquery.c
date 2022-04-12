@@ -25,6 +25,7 @@
 #include "pg_trace.h"
 #include "tcop/pquery.h"
 #include "tcop/utility.h"
+#include "utils/memtrack.h"
 #include "utils/memutils.h"
 #include "utils/snapmgr.h"
 
@@ -78,6 +79,8 @@ CreateQueryDesc(PlannedStmt *plannedstmt,
 				QueryEnvironment *queryEnv,
 				int instrument_options)
 {
+	YbPgMemResetStmtConsumption();
+
 	QueryDesc  *qd = (QueryDesc *) palloc(sizeof(QueryDesc));
 
 	qd->operation = plannedstmt->commandType;	/* operation */

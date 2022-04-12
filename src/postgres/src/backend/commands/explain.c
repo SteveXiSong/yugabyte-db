@@ -3890,7 +3890,7 @@ appendPgMemInfo(ExplainState *es, Size peakMem)
 {
 	const char *unit;
 	ConvertToReadableBytes(&peakMem, &unit);
-	appendStringInfo(es->str, "Maximum actual memory usage: %lu %s\n", peakMem,
+	appendStringInfo(es->str, "Maximum memory usage: %lu %s\n", peakMem,
 					 unit);
 }
 

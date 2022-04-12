@@ -493,11 +493,10 @@ bool MemTracker::UpdateConsumption(bool force) {
     poll_children_consumption_functors_();
   }
 
+  // Always update the PG total memory because this is cheap.
   if (update_max_mem_functor_) {
     update_max_mem_functor_();
   }
-
-  force = true;
 
   if (consumption_functor_) {
     auto now = CoarseMonoClock::now();

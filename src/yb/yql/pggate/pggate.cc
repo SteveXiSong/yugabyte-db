@@ -400,7 +400,6 @@ PgApiImpl::PgApiImpl(
   CHECK_OK(pg_client_.Start(
       proxy_cache_.get(), &messenger_holder_.messenger->scheduler(),
       *DCHECK_NOTNULL(tserver_shared_object_)));
-
 }
 
 PgApiImpl::~PgApiImpl() {
