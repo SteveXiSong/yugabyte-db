@@ -435,6 +435,9 @@ public class TestYsqlMetrics extends BasePgSQLTest {
     }
   }
 
+  /**
+   * We don't verify the actual max memory values as they are highly platform dependent.
+   */
   @Test
   public void testExplainMaxMemory() throws Exception {
     try (Statement statement = connection.createStatement()) {
@@ -455,18 +458,15 @@ public class TestYsqlMetrics extends BasePgSQLTest {
         assertTrue(hasRs);
         final ResultSet insertResult = statement.getResultSet();
         final long maxMemInsert = findMaxMemInExplain(insertResult);
-        validateMaxMemory(maxMemInsert, 40 * MBytes, 60 * MBytes);
+        assertTrue(maxMemInsert != 0);
       }
 
       // Verify that the absolute and relative values of the max memory output are within
       // expectation.
       {
-        final long maxMem_1 =
-          verifyExplainQueryMaxMem(statement, 1, 10 * KBytes, 5 * MBytes);
-        final long maxMem_1K =
-          verifyExplainQueryMaxMem(statement, 1000, 100 * KBytes, 5 * MBytes);
-        final long maxMem_1M =
-          verifyExplainQueryMaxMem(statement, 1000 * 1000, 10 * MBytes, 200 * MBytes);
+        final long maxMem_1 = runExplain(statement, 1);
+        final long maxMem_1K = runExplain(statement, 1000);
+        final long maxMem_1M = runExplain(statement, 1000 * 1000);
         assertTrue(maxMem_1 < maxMem_1K && maxMem_1K < maxMem_1M);
       }
 
@@ -474,8 +474,7 @@ public class TestYsqlMetrics extends BasePgSQLTest {
       // If the tracking logic is not accurate and has errors, it will accumulate and shows in the
       // output.
       {
-        final long maxMemSimpleStart =
-          verifyExplainQueryMaxMem(statement, 1000, 100 * KBytes, 5 * MBytes);
+        final long maxMemSimpleStart = runExplain(statement, 1000);
 
         final String query = buildExplainDemoQuery(1000);
         int loopN = 100;
@@ -483,24 +482,19 @@ public class TestYsqlMetrics extends BasePgSQLTest {
           statement.executeQuery(query);
         }
 
-        final long maxMemSimpleEnd =
-          verifyExplainQueryMaxMem(statement, 1000, 100 * KBytes, 5 * MBytes);
+        final long maxMemSimpleEnd = runExplain(statement, 1000);
         assertEquals(maxMemSimpleEnd, maxMemSimpleStart);
       }
 
-      verifyStatementMaxMem(statement,
-        "EXPLAIN ANALYZE UPDATE tst SET c1 = c1 + 1 WHERE c1 < 1000;",
-        5 * KBytes, 50 * KBytes);
-
-      verifyStatementMaxMem(statement,
-        "EXPLAIN ANALYZE DELETE FROM tst WHERE c1 < 1000;",
-        5 * KBytes, 50 * KBytes);
+      statement.execute("EXPLAIN ANALYZE UPDATE tst SET c1 = c1 + 1 WHERE c1 < 1000;");
+      statement.execute("EXPLAIN ANALYZE DELETE FROM tst WHERE c1 < 1000;");
 
       // Sanity check for DECLARE
-      statement.execute("BEGIN;");
-      statement.execute(
-        "EXPLAIN ANALYZE DECLARE decl CURSOR FOR SELECT * FROM tst limit 1000;");
-      statement.execute("END;");
+      {
+        statement.execute("BEGIN;");
+        statement.execute("EXPLAIN ANALYZE DECLARE decl CURSOR FOR SELECT * FROM tst limit 1000;");
+        statement.execute("END;");
+      }
 
       // Sanity check for VALUES
       statement.execute("EXPLAIN ANALYZE VALUES (1), (2), (3);");
@@ -512,22 +506,6 @@ public class TestYsqlMetrics extends BasePgSQLTest {
     }
   }
 
-  private void verifyStatementMaxMem(final Statement statement, final String query,
-                                     final int expLower, final int expUpper) throws Exception {
-    final boolean hasRs = statement.execute(query);
-    assertTrue(hasRs);
-    final ResultSet insertResult = statement.getResultSet();
-    final long maxMemInsert = findMaxMemInExplain(insertResult);
-    validateMaxMemory(maxMemInsert, expLower, expUpper);
-  }
-
-  private long verifyExplainQueryMaxMem(final Statement statement, final int limit,
-                                        final int expLower, final int expUpper) throws Exception {
-    final long maxMem = runExplain(statement, limit);
-    validateMaxMemory(maxMem, expLower, expUpper);
-    return maxMem;
-  }
-
   /**
    * Validate the EXPLAIN output, and return maximum memory consumption found.
    **/
@@ -535,14 +513,6 @@ public class TestYsqlMetrics extends BasePgSQLTest {
     final String explainQuery = buildExplainDemoQuery(limit);
     final ResultSet result = statement.executeQuery(explainQuery);
     return findMaxMemInExplain(result);
-  }
-
-  /**
-   * Validate max memory in bytes.
-   */
-  private void validateMaxMemory(final long maxMem, final long expLower, final long expUpper) {
-    assertTrue(expLower <= expUpper);
-    assertTrue(maxMem >= expLower && maxMem <= expUpper);
   }
 
   private final String buildExplainDemoQuery(final int limit) {
@@ -564,10 +534,13 @@ public class TestYsqlMetrics extends BasePgSQLTest {
         switch (memUnit) {
           case "GiB":
             maxMem *= 1024;
+            // fall through
           case "MiB":
             maxMem *= 1024;
+            // fall through
           case "KiB":
             maxMem *= 1024;
+            // fall through
         }
 
         return maxMem;
