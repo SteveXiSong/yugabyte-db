@@ -103,6 +103,15 @@
 #define ALLOC_BLOCKHDRSZ	MAXALIGN(sizeof(AllocBlockData))
 #define ALLOC_CHUNKHDRSZ	sizeof(struct AllocChunkData)
 
+/* Calculate the total allocated size for a block */
+#define ASET_BLOCK_TOTAL_SIZE(BLK) (BLK->endptr - ((char *)BLK))
+/*
+ * Calculate the total initial allocated size for a set. Note that the keeper
+ * block is always allocated along with the set header at the same time. It
+ * is never removed from the header or replaced.
+ */
+#define ASET_INITIAL_TOTAL_SIZE(SET) (((AllocSetContext *) SET)->keeper->endptr - ((char *) SET))
+
 typedef struct AllocBlockData *AllocBlock;	/* forward reference */
 typedef struct AllocChunkData *AllocChunk;
 
@@ -673,9 +682,7 @@ AllocSetDelete(MemoryContext context)
 				freelist->first_free = (AllocSetContext *) oldset->header.nextchild;
 				freelist->num_free--;
 
-				YbPgMemSubConsumption(
-					((AllocSetContext *) oldset)->keeper->endptr -
-					((char *) oldset));
+				YbPgMemSubConsumption(ASET_INITIAL_TOTAL_SIZE(oldset));
 
 				/* All that remains is to free the header/initial block */
 				free(oldset);
@@ -702,15 +709,14 @@ AllocSetDelete(MemoryContext context)
 
 		if (block != set->keeper)
 		{
-			YbPgMemSubConsumption(block->endptr - ((char *) block));
+			YbPgMemSubConsumption(ASET_BLOCK_TOTAL_SIZE(block));
 			free(block);
 		}
 
 		block = next;
 	}
 
-	YbPgMemSubConsumption(((AllocSetContext *) set)->keeper->endptr -
-						  ((char *) set));
+	YbPgMemSubConsumption(ASET_INITIAL_TOTAL_SIZE(set));
 	/* Finally, free the context header, including the keeper block */
 	free(set);
 }
@@ -1055,7 +1061,7 @@ AllocSetFree(MemoryContext context, void *pointer)
 		wipe_mem(block, block->freeptr - ((char *) block));
 #endif
 
-		YbPgMemSubConsumption(block->endptr - ((char *) block));
+		YbPgMemSubConsumption(ASET_BLOCK_TOTAL_SIZE(block));
 		free(block);
 	}
 	else
