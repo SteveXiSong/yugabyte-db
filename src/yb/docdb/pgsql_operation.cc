@@ -802,14 +802,15 @@ Status PgsqlWriteOperation::GetDocPaths(GetDocPathsMode mode,
 
 //--------------------------------------------------------------------------------------------------
 
-Result<size_t> PgsqlReadOperation::Execute(const YQLStorageIf& ql_storage,
-                                           CoarseTimePoint deadline,
-                                           const ReadHybridTime& read_time,
-                                           bool is_explicit_request_read_time,
-                                           const DocReadContext& doc_read_context,
-                                           const DocReadContext* index_doc_read_context,
-                                           faststring *result_buffer,
-                                           HybridTime *restart_read_ht) {
+Result<size_t> PgsqlReadOperation::Execute(
+    const YQLStorageIf& ql_storage,
+    CoarseTimePoint deadline,
+    const ReadHybridTime& read_time,
+    bool is_explicit_request_read_time,
+    const DocReadContext& doc_read_context,
+    const DocReadContext* index_doc_read_context,
+    faststring* result_buffer,
+    HybridTime* restart_read_ht) {
   size_t fetched_rows = 0;
   // Reserve space for fetched rows count.
   pggate::PgWire::WriteInt64(0, result_buffer);
@@ -820,6 +821,7 @@ Result<size_t> PgsqlReadOperation::Execute(const YQLStorageIf& ql_storage,
 
   // Fetching data.
   bool has_paging_state = false;
+  // TODO ssong: for other req
   if (request_.batch_arguments_size() > 0) {
     SCHECK(request_.has_ybctid_column_value(),
            InternalError,
@@ -1036,6 +1038,7 @@ Result<size_t> PgsqlReadOperation::ExecuteScalar(const YQLStorageIf& ql_storage,
 
   // Fetching data.
   int match_count = 0;
+  uint64 scanned_count = 0;
   QLTableRow row;
   while (fetched_rows < row_count_limit && VERIFY_RESULT(iter->HasNext()) &&
          !scan_time_exceeded) {
@@ -1065,6 +1068,7 @@ Result<size_t> PgsqlReadOperation::ExecuteScalar(const YQLStorageIf& ql_storage,
     } else {
       RETURN_NOT_OK(iter->NextRow(projection, &row));
     }
+    scanned_count++;
 
     // Match the row with the where condition before adding to the row block.
     bool is_match = true;
@@ -1100,6 +1104,7 @@ Result<size_t> PgsqlReadOperation::ExecuteScalar(const YQLStorageIf& ql_storage,
   RETURN_NOT_OK(SetPagingStateIfNecessary(
       iter, fetched_rows, row_count_limit, scan_time_exceeded, *scan_schema,
       read_time, has_paging_state));
+  response_.set_docdb_scanned_rows(scanned_count);
   return fetched_rows;
 }
 
