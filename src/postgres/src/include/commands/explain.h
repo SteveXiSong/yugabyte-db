@@ -36,6 +36,8 @@ typedef struct ExplainState
 	bool		timing;			/* print detailed node timing */
 	bool		summary;		/* print total planning and execution timing */
 	bool		rpc;			/* print RPC stats */
+	bool		docdb;			/* print docdb stats */
+
 	ExplainFormat format;		/* output format */
 	/* state for output formatting --- not reset for each new plan tree */
 	int			indent;			/* current indentation level */
@@ -48,6 +50,8 @@ typedef struct ExplainState
 	Bitmapset  *printed_subplans;	/* ids of SubPlans we've printed */
 	double		yb_total_read_rpc_count;	/* total read RPC count */
 	double		yb_total_read_rpc_wait;	/* total read RPC wait time */
+
+	uint64 yb_docdb_total_scanned_rows; /* Total scanned rows by DocDB */
 } ExplainState;
 
 /* Hook for plugins to get control in ExplainOneQuery() */

@@ -480,6 +480,7 @@ pgss_explain(QueryDesc *queryDesc)
 	es->analyze = false;
     es->verbose = false;
 	es->costs = false;
+	es->docdb = false;
 	es->format = EXPLAIN_FORMAT_TEXT;
 
 	ExplainBeginOutput(es);

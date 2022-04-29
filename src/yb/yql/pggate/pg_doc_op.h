@@ -329,6 +329,14 @@ class PgDocOp : public std::enable_shared_from_this<PgDocOp> {
     read_rpc_wait_time_ = MonoDelta::FromNanoseconds(0);
   }
 
+  uint64_t GetScannedDocRows() const {
+    return total_scanned_docdb_rows;
+  }
+
+  uint64_t GetScannedDocIndexRows() const {
+    return total_scanned_docdb_index_rows;
+  }
+
  protected:
   PgDocOp(
     const PgSession::ScopedRefPtr& pg_session, PgTable* table,
@@ -396,6 +404,11 @@ class PgDocOp : public std::enable_shared_from_this<PgDocOp> {
 
   // Executed row count.
   int32_t rows_affected_count_ = 0;
+
+  // Rows scanned in DocDb. Accumulated across fetches. Reset for every new
+  // Op if this Op is recycled.
+  uint64 total_scanned_docdb_rows = 0;
+  uint64 total_scanned_docdb_index_rows = 0;
 
   // Whether all requested data by the statement has been received or there's a run-time error.
   bool end_of_data_ = false;

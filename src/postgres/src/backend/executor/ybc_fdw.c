@@ -690,6 +690,24 @@ ybcExplainForeignScan(ForeignScanState *node, ExplainState *es)
 {
 	if (node->yb_fdw_aggs != NIL)
 		ExplainPropertyBool("Partial Aggregate", true, es);
+
+	if (es->docdb)
+	{
+		YbFdwExecState *ybc_state = (YbFdwExecState *) node->fdw_state;
+		YBCPgStatement handle = ybc_state->handle;
+
+		YBCSelectStats stats;
+		memset(&stats, 0, sizeof(YBCSelectStats));
+		YBCPgRetrieveSelectStats(handle, &stats);
+
+		uint64_t irows = stats.docdb_index_scanned_row_count;
+		if (irows != 0)
+			ExplainPropertyInteger("DocDb Scanned Index Rows", NULL, irows, es);
+
+		uint64_t rows = stats.docdb_table_scanned_row_count;
+		ExplainPropertyInteger("DocDb Scanned Table Rows", NULL, rows, es);
+		es->yb_docdb_total_scanned_rows += rows;
+	}
 }
 
 void

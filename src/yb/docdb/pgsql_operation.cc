@@ -1091,6 +1091,8 @@ Result<size_t> PgsqlReadOperation::ExecuteSample(const YQLStorageIf& ql_storage,
   RETURN_NOT_OK(SetPagingStateIfNecessary(
       table_iter_.get(), scanned_rows, row_count_limit, scan_time_exceeded,
       doc_read_context.schema, read_time, has_paging_state));
+  response_.mutable_stats()->set_scanned_table_rows(scanned_rows - 1);
+
   return fetched_rows;
 }
 
@@ -1205,6 +1207,8 @@ Result<size_t> PgsqlReadOperation::ExecuteScalar(const YQLStorageIf& ql_storage,
 
   // Fetching data.
   int match_count = 0;
+  uint64 scanned_table_count = 0;
+  uint64 scanned_index_count = 0;
   QLTableRow row;
   while (fetched_rows < row_count_limit && VERIFY_RESULT(iter->HasNext()) &&
          !scan_time_exceeded) {
@@ -1222,6 +1226,8 @@ Result<size_t> PgsqlReadOperation::ExecuteScalar(const YQLStorageIf& ql_storage,
         continue;
       }
       // Index matches the condition, get the ybctid of the target row
+      scanned_index_count++;
+
       const auto& tuple_id = row.GetValue(ybbasectid_id);
       SCHECK_NE(tuple_id, boost::none, Corruption, "ybbasectid not found in index row");
       // Seek the target row using main table iterator
@@ -1247,6 +1253,7 @@ Result<size_t> PgsqlReadOperation::ExecuteScalar(const YQLStorageIf& ql_storage,
       // Fetch main table row
       RETURN_NOT_OK(iter->NextRow(doc_projection, &row));
     }
+    scanned_table_count++;
 
     // Match the row with the where condition before adding to the row block.
     RETURN_NOT_OK(doc_expr_exec.Exec(row, nullptr, &is_match));
@@ -1286,6 +1293,10 @@ Result<size_t> PgsqlReadOperation::ExecuteScalar(const YQLStorageIf& ql_storage,
   RETURN_NOT_OK(SetPagingStateIfNecessary(
       iter, fetched_rows, row_count_limit, scan_time_exceeded,
       request_.has_index_request() ? *index_schema : doc_schema, read_time, has_paging_state));
+      iter, fetched_rows, row_count_limit, scan_time_exceeded, *scan_schema,
+      read_time, has_paging_state));
+  response_.mutable_stats()->set_scanned_table_rows(scanned_table_count);
+  response_.mutable_stats()->set_scanned_index_rows(scanned_index_count);
   return fetched_rows;
 }
 
@@ -1337,6 +1348,7 @@ Result<size_t> PgsqlReadOperation::ExecuteBatchYbctid(const YQLStorageIf& ql_sto
   // Set status for this batch.
   // Mark all rows were processed even in case some of the ybctids were not found.
   response_.set_batch_arg_count(request_.batch_arguments_size());
+  response_.mutable_stats()->set_scanned_table_rows(row_count);
 
   return row_count;
 }

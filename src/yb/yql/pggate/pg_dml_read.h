@@ -110,6 +110,8 @@ class PgDmlRead : public PgDml {
 
   bool IsIndexOrderedScan() const;
 
+  void GetScannedDocRows(YBCSelectStats* stats);
+
  protected:
   // Allocate column protobuf.
   LWPgsqlExpressionPB *AllocColumnBindPB(PgColumn *col) override;

@@ -54,6 +54,10 @@ class PgSelectIndex : public PgSelect {
     return is_executed_;
   }
 
+  size_t getScannedIndexRows() const {
+    return doc_op_->GetScannedDocRows();
+  }
+
  private:
   // This secondary query should be executed just one time.
   bool is_executed_ = false;

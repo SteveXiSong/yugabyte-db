@@ -784,5 +784,19 @@ bool PgDmlRead::IsIndexOrderedScan() const {
       !secondary_index_query_->IsAllPrimaryKeysBound(0 /* num_range_components_in_expected */);
 }
 
+void PgDmlRead::GetScannedDocRows(YBCSelectStats* stats) {
+  if (secondary_index_query_ && secondary_index_query_->has_doc_op()) {
+    stats->docdb_index_scanned_row_count = secondary_index_query_->getScannedIndexRows();
+    if (prepare_params_.index_only_scan) {
+      stats->docdb_table_scanned_row_count = 0;
+      return;
+    }
+  } else if (prepare_params_.querying_colocated_table) {
+    stats->docdb_index_scanned_row_count = doc_op_->GetScannedDocIndexRows();
+  }
+
+  stats->docdb_table_scanned_row_count = doc_op_->GetScannedDocRows();
+}
+
 }  // namespace pggate
 }  // namespace yb

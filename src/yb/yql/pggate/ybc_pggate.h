@@ -480,6 +480,10 @@ YBCStatus YBCPgExecSelect(YBCPgStatement handle, const YBCPgExecParameters *exec
 void YBCGetAndResetReadRpcStats(YBCPgStatement handle, uint64_t* reads, uint64_t* read_wait,
                                 uint64_t* tbl_reads, uint64_t* tbl_read_wait);
 
+YBCStatus YBCPgRetrieveSelectStats(YBCPgStatement handle, YBCSelectStats* stats);
+
+YBCStatus YBCPgRetrieveSelectIndexStats(YBCPgStatement handle, YBCSelectStats* stats);
+
 // Transaction control -----------------------------------------------------------------------------
 YBCStatus YBCPgBeginTransaction();
 YBCStatus YBCPgRecreateTransaction();

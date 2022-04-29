@@ -14,6 +14,8 @@
 #include "postgres.h"
 
 #include "access/xact.h"
+#include "access/yb_scan.h"
+#include "access/relscan.h"
 #include "catalog/pg_collation.h"
 #include "catalog/pg_type.h"
 #include "commands/createas.h"
@@ -137,7 +139,9 @@ static void ExplainJSONLineEnding(ExplainState *es);
 static void ExplainYAMLLineStarting(ExplainState *es);
 static void escape_yaml(StringInfo buf, const char *str);
 static void appendPgMemInfo(ExplainState *es, const Size peakMem);
-
+static void ExplainIndexOnlyScanRows(IndexOnlyScanState *node, ExplainState* es);
+static void ExplainIndexScanRows(IndexScanState *node, ExplainState* es);
+static void ExplainSeqScanRows(SeqScanState *node, ExplainState *es);
 
 /*
  * ExplainQuery -
@@ -170,6 +174,8 @@ ExplainQuery(ParseState *pstate, ExplainStmt *stmt, const char *queryString,
 			es->buffers = defGetBoolean(opt);
 		else if (strcmp(opt->defname, "rpc") == 0)
 			es->rpc = defGetBoolean(opt);
+		else if (strcmp(opt->defname, "docdb") == 0)
+			es->docdb = defGetBoolean(opt);
 		else if (strcmp(opt->defname, "timing") == 0)
 		{
 			timing_set = true;
@@ -220,6 +226,10 @@ ExplainQuery(ParseState *pstate, ExplainStmt *stmt, const char *queryString,
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("EXPLAIN option TIMING requires ANALYZE")));
+
+	if (es->docdb && !es->analyze)
+		ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+						errmsg("EXPLAIN option DOCDB requires ANALYZE")));
 
 	/* if the summary was not set explicitly, set default value */
 	es->summary = (summary_set) ? es->summary : es->analyze;
@@ -635,7 +645,15 @@ ExplainOnePlan(PlannedStmt *plannedstmt, IntoClause *into, ExplainState *es,
 		}
 
 		if (IsYugaByteEnabled())
+		{
+			if (es->docdb && es->yb_docdb_total_scanned_rows > 0)
+			{
+				ExplainPropertyInteger("DocDB Scanned Rows", NULL,
+									   es->yb_docdb_total_scanned_rows, es);
+			}
+
 			appendPgMemInfo(es, peakMem);
+		}
 	}
 
 	ExplainCloseGroup("Query", NULL, true, es);
@@ -1597,6 +1615,8 @@ ExplainNode(PlanState *planstate, List *ancestors,
 										   planstate, es);
 			if (es->rpc && es->analyze && planstate->instrument->nloops > 0)
 				show_yb_rpc_stats(planstate, es);
+			if (es->docdb)
+				ExplainIndexScanRows((IndexScanState*) planstate, es);
 			break;
 		case T_IndexOnlyScan:
 			show_scan_qual(((IndexOnlyScan *) plan)->indexqual,
@@ -1615,11 +1635,13 @@ ExplainNode(PlanState *planstate, List *ancestors,
 			if (plan->qual)
 				show_instrumentation_count("Rows Removed by Filter", 1,
 										   planstate, es);
-			if (es->analyze)
+			if (es->analyze && !IsYugaByteEnabled())
 				ExplainPropertyFloat("Heap Fetches", NULL,
 									 planstate->instrument->ntuples2, 0, es);
 			if (es->rpc && es->analyze && planstate->instrument->nloops > 0)
 				show_yb_rpc_stats(planstate, es);
+			if (es->docdb)
+				ExplainIndexOnlyScanRows((IndexOnlyScanState *) planstate, es);
 			break;
 		case T_BitmapIndexScan:
 			show_scan_qual(((BitmapIndexScan *) plan)->indexqualorig,
@@ -1655,6 +1677,9 @@ ExplainNode(PlanState *planstate, List *ancestors,
 										   planstate, es);
 			if (es->rpc && es->analyze && planstate->instrument->nloops > 0)
 				show_yb_rpc_stats(planstate, es);
+
+			if (es->docdb)
+				ExplainSeqScanRows((SeqScanState *) planstate, es);
 			break;
 		case T_YbSeqScan:
 			/*
@@ -1666,6 +1691,8 @@ ExplainNode(PlanState *planstate, List *ancestors,
 			if (plan->qual)
 				show_instrumentation_count("Rows Removed by Filter", 1,
 										   planstate, es);
+			if (es->docdb)
+				ExplainSeqScanRows((SeqScanState *) planstate, es);
 			break;
 		case T_Gather:
 			{
@@ -4007,4 +4034,70 @@ appendPgMemInfo(ExplainState *es, const Size peakMem)
 {
 	Size peakMemKb = CEILING_K(peakMem);
 	ExplainPropertyInteger("Peak Memory Usage", "kB", peakMemKb, es);
+}
+
+static void
+ExplainSeqScanRows(SeqScanState *node, ExplainState *es)
+{
+	ScanState	   ss = node->ss;
+	YbScanDesc	   ybscan = ss.ss_currentScanDesc->ybscan;
+	YBCPgStatement handle = ybscan->handle;
+	double		   nl = ((PlanState *) node)->instrument->nloops;
+
+	YBCSelectStats stats;
+	memset(&stats, 0, sizeof(YBCSelectStats));
+	YBCPgRetrieveSelectStats(handle, &stats);
+
+	uint   irows = stats.docdb_table_scanned_row_count;
+	double rows = irows / nl;
+	ExplainPropertyFloat("DocDb Scanned Table Rows", NULL, rows,
+						 rows < 1 ? 2 : 0, es);
+
+	es->yb_docdb_total_scanned_rows += irows;
+}
+
+static void
+ExplainIndexOnlyScanRows(IndexOnlyScanState *node, ExplainState* es)
+{
+	IndexScanDesc  ioss_desc = node->ioss_ScanDesc;
+	YbScanDesc	   ybscan = (YbScanDesc) ioss_desc->opaque;
+	YBCPgStatement handle = ybscan->handle;
+	double		   nl = ((PlanState *) node)->instrument->nloops;
+
+	YBCSelectStats stats;
+	memset(&stats, 0, sizeof(YBCSelectStats));
+	YBCPgRetrieveSelectStats(handle, &stats);
+
+	double rows = stats.docdb_table_scanned_row_count / nl;
+	ExplainPropertyFloat("DocDb Scanned Index Rows", NULL, rows,
+						 rows < 1 ? 2 : 0, es);
+	es->yb_docdb_total_scanned_rows += stats.docdb_table_scanned_row_count;
+}
+
+static void
+ExplainIndexScanRows(IndexScanState *node, ExplainState *es)
+{
+	IndexScanDesc  iss_desc = node->iss_ScanDesc;
+	YbScanDesc	   ybscan = (YbScanDesc) iss_desc->opaque;
+	YBCPgStatement handle = ybscan->handle;
+	double		   nl = ((PlanState *) node)->instrument->nloops;
+
+	YBCSelectStats stats;
+	memset(&stats, 0, sizeof(YBCSelectStats));
+	YBCPgRetrieveSelectStats(handle, &stats);
+
+	// Show scanned rows for the secondary index table
+	double irows = stats.docdb_index_scanned_row_count / nl;
+	ExplainPropertyFloat("DocDb Scanned Index Rows", NULL, irows,
+						 irows < 1 ? 2 : 0, es);
+	es->yb_docdb_total_scanned_rows += stats.docdb_index_scanned_row_count;
+
+	// Show scanned rows for the main table
+	uint64 rows = (stats.docdb_table_scanned_row_count != 0 ?
+					   stats.docdb_table_scanned_row_count :
+						 ybscan->relation->actual_table_scanned_rows);
+	double mrows = rows / nl;
+	ExplainPropertyFloat("DocDb Scanned Table Rows", NULL, mrows,
+						 mrows < 1 ? 2 : 0, es);
+	es->yb_docdb_total_scanned_rows += rows;
 }

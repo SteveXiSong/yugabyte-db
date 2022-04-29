@@ -1496,6 +1496,18 @@ Status PgApiImpl::ExecSelect(PgStatement *handle, const PgExecParameters *exec_p
   return dml_read.Exec(exec_params);
 }
 
+Status PgApiImpl::RetrieveSelectStats(PgStatement *handle, YBCSelectStats* stats) {
+  auto& dml_read = *down_cast<PgDmlRead*>(handle);
+  dml_read.GetScannedDocRows(stats);
+  return Status::OK();
+}
+
+Status PgApiImpl::RetrieveSelectIndexStats(PgStatement *handle, YBCSelectStats* stats) {
+  auto& dml_read = *down_cast<PgDmlRead*>(handle);
+  dml_read.GetScannedDocRows(stats);
+  return Status::OK();
+}
+
 //--------------------------------------------------------------------------------------------------
 // Expressions.
 //--------------------------------------------------------------------------------------------------

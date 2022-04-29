@@ -827,6 +827,10 @@ YBCStatus YBCPgDmlExecWriteOp(YBCPgStatement handle, int32_t *rows_affected_coun
   return ToYBCStatus(pgapi->DmlExecWriteOp(handle, rows_affected_count));
 }
 
+YBCStatus YBCPgRetrieveDmlStats(YBCPgStatement handle, YBCSelectStats* stats) {
+  return ToYBCStatus(pgapi->RetrieveSelectStats(handle, stats));
+}
+
 YBCStatus YBCPgBuildYBTupleId(const YBCPgYBTupleIdDescriptor *source, uint64_t *ybctid) {
   return ProcessYbctid(*source, [ybctid](const auto&, const auto& yid) {
     const auto* type_entity = pgapi->FindTypeEntity(kByteArrayOid);
@@ -957,6 +961,14 @@ YBCStatus YBCPgSetForwardScan(YBCPgStatement handle, bool is_forward_scan) {
 
 YBCStatus YBCPgExecSelect(YBCPgStatement handle, const YBCPgExecParameters *exec_params) {
   return ToYBCStatus(pgapi->ExecSelect(handle, exec_params));
+}
+
+YBCStatus YBCPgRetrieveSelectStats(YBCPgStatement handle, YBCSelectStats* stats) {
+  return ToYBCStatus(pgapi->RetrieveSelectStats(handle, stats));
+}
+
+YBCStatus YBCPgRetrieveSelectIndexStats(YBCPgStatement handle, YBCSelectStats* stats) {
+  return ToYBCStatus(pgapi->RetrieveSelectIndexStats(handle, stats));
 }
 
 //--------------------------------------------------------------------------------------------------
