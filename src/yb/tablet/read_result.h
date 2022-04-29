@@ -30,6 +30,7 @@ struct PgsqlReadRequestResult {
   PgsqlResponsePB response;
   faststring rows_data;
   HybridTime restart_read_ht;
+  uint64 scanned_rows;
 };
 
 } // namespace tablet

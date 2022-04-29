@@ -347,6 +347,13 @@ class PgDocOp : public std::enable_shared_from_this<PgDocOp> {
       PgSession* session, const PgsqlOpPtr* ops, size_t ops_count, const PgTableDesc& table,
       uint64_t* read_time, bool force_non_bufferable);
 
+  // Accumulate the rows scanned in DocDb.
+  // Return the latest accumulated DocDb scanned row count.
+  uint64 UpdateDocDbScannedRows(const LWPgsqlResponsePB& response) {
+    return total_scanned_docdb_rows +=
+        response.has_docdb_scanned_rows() ? response.docdb_scanned_rows() : 0;
+  }
+
   //----------------------------------- Data Members -----------------------------------------------
  protected:
   // Session control.
@@ -391,6 +398,10 @@ class PgDocOp : public std::enable_shared_from_this<PgDocOp> {
 
   // Executed row count.
   int32_t rows_affected_count_ = 0;
+
+  // Rows scanned in DocDb. Accumulated across fetches. Reset for every new
+  // Op if this Op is recycled.
+  uint64 total_scanned_docdb_rows = 0;
 
   // Whether all requested data by the statement has been received or there's a run-time error.
   bool end_of_data_ = false;

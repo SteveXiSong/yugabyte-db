@@ -236,6 +236,7 @@ Status PgDocOp::ExecuteInit(const PgExecParameters *exec_params) {
   if (exec_params) {
     exec_params_ = *exec_params;
   }
+  total_scanned_docdb_rows = 0;
   return Status::OK();
 }
 
@@ -268,6 +269,8 @@ Status PgDocOp::GetResult(list<PgDocResult> *rowsets) {
     DCHECK(response_.Valid());
     auto result = response_.Get();
     auto rows = VERIFY_RESULT(ProcessResponse(result));
+    VLOG(1) << "Accumulated scanned rows in DocDb: " << total_scanned_docdb_rows;
+
     // In case ProcessResponse doesn't fail with an error
     // it should return non empty rows and/or set end_of_data_.
     DCHECK(!rows.empty() || end_of_data_);
@@ -394,6 +397,7 @@ Result<std::list<PgDocResult>> PgDocOp::ProcessResponseResult(
     }
     // Get total number of rows that are operated on.
     rows_affected_count_ += op_response->rows_affected_count();
+    UpdateDocDbScannedRows(*op_response);
 
     // A single batch of requests almost always is directed to fetch data from a single tablet.
     // However, when tablets split, data can be sharded/distributed across multiple tablets.
