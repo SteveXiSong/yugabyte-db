@@ -812,7 +812,6 @@ Result<size_t> PgsqlReadOperation::Execute(
 
   // Fetching data.
   bool has_paging_state = false;
-  // TODO ssong: for other req
   if (request_.batch_arguments_size() > 0) {
     SCHECK(request_.has_ybctid_column_value(),
            InternalError,
@@ -951,6 +950,8 @@ Result<size_t> PgsqlReadOperation::ExecuteSample(const YQLStorageIf& ql_storage,
   RETURN_NOT_OK(SetPagingStateIfNecessary(
       table_iter_.get(), scanned_rows, row_count_limit, scan_time_exceeded,
       doc_read_context.schema, read_time, has_paging_state));
+  // -1 as scanned_rows now points to the row for next iteration
+  response_.set_docdb_scanned_rows(scanned_rows-1);
   return fetched_rows;
 }
 
@@ -1052,10 +1053,12 @@ Result<size_t> PgsqlReadOperation::ExecuteScalar(const YQLStorageIf& ql_storage,
       }
       row.Clear();
       RETURN_NOT_OK(table_iter_->NextRow(projection, &row));
+      // One extra scan for index.
+      scanned_count += 2;
     } else {
       RETURN_NOT_OK(iter->NextRow(projection, &row));
+      scanned_count++;
     }
-    scanned_count++;
 
     // Match the row with the where condition before adding to the row block.
     bool is_match = true;
@@ -1126,6 +1129,7 @@ Result<size_t> PgsqlReadOperation::ExecuteBatchYbctid(const YQLStorageIf& ql_sto
   // Set status for this batch.
   // Mark all rows were processed even in case some of the ybctids were not found.
   response_.set_batch_arg_count(request_.batch_arguments_size());
+  response_.set_docdb_scanned_rows(row_count);
 
   return row_count;
 }

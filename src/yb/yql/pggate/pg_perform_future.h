@@ -36,10 +36,6 @@ class PerformFuture {
   bool Ready() const;
   Result<rpc::CallResponsePtr> Get();
 
-  bool Processed() {
-    return Valid();
-  }
-
  private:
   std::future<PerformResult> future_;
   PgSession* session_ = nullptr;
