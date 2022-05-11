@@ -404,7 +404,8 @@ Result<std::list<PgDocResult>> PgDocOp::ProcessCallResponse(const rpc::CallRespo
     }
     // Get total number of rows that are operated on.
     rows_affected_count_ += op_response->rows_affected_count();
-    UpdateDocDbScannedRows(*op_response);
+    total_scanned_docdb_rows +=
+        op_response->has_docdb_scanned_rows() ? op_response->docdb_scanned_rows() : 0;
 
     // A single batch of requests almost always is directed to fetch data from a single tablet.
     // However, when tablets split, data can be sharded/distributed across multiple tablets.

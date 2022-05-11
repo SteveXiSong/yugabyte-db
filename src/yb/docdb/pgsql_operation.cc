@@ -802,15 +802,14 @@ Status PgsqlWriteOperation::GetDocPaths(GetDocPathsMode mode,
 
 //--------------------------------------------------------------------------------------------------
 
-Result<size_t> PgsqlReadOperation::Execute(
-    const YQLStorageIf& ql_storage,
-    CoarseTimePoint deadline,
-    const ReadHybridTime& read_time,
-    bool is_explicit_request_read_time,
-    const DocReadContext& doc_read_context,
-    const DocReadContext* index_doc_read_context,
-    faststring* result_buffer,
-    HybridTime* restart_read_ht) {
+Result<size_t> PgsqlReadOperation::Execute(const YQLStorageIf& ql_storage,
+                                           CoarseTimePoint deadline,
+                                           const ReadHybridTime& read_time,
+                                           bool is_explicit_request_read_time,
+                                           const DocReadContext& doc_read_context,
+                                           const DocReadContext* index_doc_read_context,
+                                           faststring *result_buffer,
+                                           HybridTime *restart_read_ht) {
   size_t fetched_rows = 0;
   // Reserve space for fetched rows count.
   pggate::PgWire::WriteInt64(0, result_buffer);
@@ -959,8 +958,6 @@ Result<size_t> PgsqlReadOperation::ExecuteSample(const YQLStorageIf& ql_storage,
   RETURN_NOT_OK(SetPagingStateIfNecessary(
       table_iter_.get(), scanned_rows, row_count_limit, scan_time_exceeded,
       doc_read_context.schema, read_time, has_paging_state));
-  // -1 as scanned_rows now points to the row for next iteration
-  response_.set_docdb_scanned_rows(scanned_rows-1);
   return fetched_rows;
 }
 

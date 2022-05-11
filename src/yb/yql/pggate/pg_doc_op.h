@@ -355,13 +355,6 @@ class PgDocOp : public std::enable_shared_from_this<PgDocOp> {
       PgSession* session, const PgsqlOpPtr* ops, size_t ops_count, const PgTableDesc& table,
       uint64_t in_txn_limit, bool force_non_bufferable);
 
-  // Accumulate the rows scanned in DocDb.
-  // Return the latest accumulated DocDb scanned row count.
-  uint64 UpdateDocDbScannedRows(const LWPgsqlResponsePB& response) {
-    return total_scanned_docdb_rows +=
-        response.has_docdb_scanned_rows() ? response.docdb_scanned_rows() : 0;
-  }
-
   //----------------------------------- Data Members -----------------------------------------------
  protected:
   // Session control.
