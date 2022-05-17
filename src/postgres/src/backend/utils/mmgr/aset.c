@@ -47,7 +47,6 @@
 #include "postgres.h"
 
 #include "utils/memdebug.h"
-#include "utils/memtrack.h"
 #include "utils/memutils.h"
 
 /* Define this to detail debug alloc information */

@@ -25,7 +25,6 @@
 #include "pg_trace.h"
 #include "tcop/pquery.h"
 #include "tcop/utility.h"
-#include "utils/memtrack.h"
 #include "utils/memutils.h"
 #include "utils/snapmgr.h"
 

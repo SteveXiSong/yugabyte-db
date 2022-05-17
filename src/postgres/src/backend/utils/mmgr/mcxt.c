@@ -23,11 +23,10 @@
 
 #include "mb/pg_wchar.h"
 #include "miscadmin.h"
-#include "pg_yb_utils.h"
 #include "utils/memdebug.h"
-#include "utils/memtrack.h"
 #include "utils/memutils.h"
 #include "yb/yql/pggate/ybc_pggate.h"
+#include "pg_yb_utils.h"
 
 YbPgMemTracker PgMemTracker = PG_MEM_TRACKER_INIT;
 

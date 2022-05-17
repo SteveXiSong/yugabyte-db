@@ -33,9 +33,6 @@ import org.yb.minicluster.MiniYBCluster;
 public class TestYsqlMetrics extends BasePgSQLTest {
   private static final Logger LOG = LoggerFactory.getLogger(TestYsqlMetrics.class);
 
-  private static final int KBytes = 1024;
-  private static final int MBytes = KBytes * KBytes;
-
   @Test
   public void testMetrics() throws Exception {
     Statement statement = connection.createStatement();
@@ -436,6 +433,8 @@ public class TestYsqlMetrics extends BasePgSQLTest {
   }
 
   /**
+   * This test verifies memory stats doesn't break EXPLAIN ANALYZE.
+   * It also does basic memory stats verification in relative method.
    * We don't verify the actual max memory values as they are highly platform dependent.
    */
   @Test
@@ -464,9 +463,9 @@ public class TestYsqlMetrics extends BasePgSQLTest {
       // Verify that the absolute and relative values of the max memory output are within
       // expectation.
       {
-        final long maxMem_1 = runExplain(statement, 1);
-        final long maxMem_1K = runExplain(statement, 1000);
-        final long maxMem_1M = runExplain(statement, 1000 * 1000);
+        final long maxMem_1 = runExplainAnalyze(statement, 1);
+        final long maxMem_1K = runExplainAnalyze(statement, 1000);
+        final long maxMem_1M = runExplainAnalyze(statement, 1000 * 1000);
         assertTrue(maxMem_1 < maxMem_1K && maxMem_1K < maxMem_1M);
       }
 
@@ -474,29 +473,29 @@ public class TestYsqlMetrics extends BasePgSQLTest {
       // If the tracking logic is not accurate and has errors, it will accumulate and shows in the
       // output.
       {
-        final long maxMemSimpleStart = runExplain(statement, 1000);
+        final long maxMemSimpleStart = runExplainAnalyze(statement, 1000);
 
-        final String query = buildExplainDemoQuery(1000);
+        final String query = buildExplainAnalyzeDemoQuery(1000);
         int loopN = 100;
         while (loopN-- > 0) {
           statement.executeQuery(query);
         }
 
-        final long maxMemSimpleEnd = runExplain(statement, 1000);
+        final long maxMemSimpleEnd = runExplainAnalyze(statement, 1000);
         assertEquals(maxMemSimpleEnd, maxMemSimpleStart);
       }
 
+      // The following tests only verifies EXPLAIN ANALYZE can be properly executed
+      // as the actual output values are highly platform dependent.
       statement.execute("EXPLAIN ANALYZE UPDATE tst SET c1 = c1 + 1 WHERE c1 < 1000;");
       statement.execute("EXPLAIN ANALYZE DELETE FROM tst WHERE c1 < 1000;");
 
-      // Sanity check for DECLARE
       {
         statement.execute("BEGIN;");
         statement.execute("EXPLAIN ANALYZE DECLARE decl CURSOR FOR SELECT * FROM tst limit 1000;");
         statement.execute("END;");
       }
 
-      // Sanity check for VALUES
       statement.execute("EXPLAIN ANALYZE VALUES (1), (2), (3);");
 
       /**
@@ -509,13 +508,13 @@ public class TestYsqlMetrics extends BasePgSQLTest {
   /**
    * Validate the EXPLAIN output, and return maximum memory consumption found.
    **/
-  private long runExplain(Statement statement, final int limit) throws Exception {
-    final String explainQuery = buildExplainDemoQuery(limit);
+  private long runExplainAnalyze(Statement statement, final int limit) throws Exception {
+    final String explainQuery = buildExplainAnalyzeDemoQuery(limit);
     final ResultSet result = statement.executeQuery(explainQuery);
     return findMaxMemInExplain(result);
   }
 
-  private final String buildExplainDemoQuery(final int limit) {
+  private final String buildExplainAnalyzeDemoQuery(final int limit) {
     return "explain analyze execute demo(" + limit + ");";
   }
 

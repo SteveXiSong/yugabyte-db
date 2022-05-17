@@ -34,13 +34,13 @@
 #include "utils/builtins.h"
 #include "utils/json.h"
 #include "utils/lsyscache.h"
-#include "utils/memtrack.h"
 #include "utils/rel.h"
 #include "utils/ruleutils.h"
 #include "utils/snapmgr.h"
 #include "utils/tuplesort.h"
 #include "utils/typcache.h"
 #include "utils/xml.h"
+
 
 /* Hook for plugins to get control in ExplainOneQuery() */
 ExplainOneQuery_hook_type ExplainOneQuery_hook = NULL;
