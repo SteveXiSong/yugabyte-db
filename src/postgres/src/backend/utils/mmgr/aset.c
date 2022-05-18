@@ -1056,11 +1056,14 @@ AllocSetFree(MemoryContext context, void *pointer)
 			set->blocks = block->next;
 		if (block->next)
 			block->next->prev = block->prev;
+
+		// Must be place before the wipe_mem
+		YbPgMemSubConsumption(block->endptr - ((char*)block));
+
 #ifdef CLOBBER_FREED_MEMORY
 		wipe_mem(block, block->freeptr - ((char *) block));
 #endif
 
-		YbPgMemSubConsumption(ASET_BLOCK_TOTAL_SIZE(block));
 		free(block);
 	}
 	else
