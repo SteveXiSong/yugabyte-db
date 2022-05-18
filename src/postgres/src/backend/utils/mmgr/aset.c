@@ -619,7 +619,7 @@ AllocSetReset(MemoryContext context)
 		else
 		{
 			/* Normal case, release the block */
-			YbPgMemSubConsumption(block->endptr - ((char *) block));
+			YbPgMemSubConsumption(ASET_BLOCK_TOTAL_SIZE(block));
 
 #ifdef CLOBBER_FREED_MEMORY
 			wipe_mem(block, block->freeptr - ((char *) block));
@@ -1057,13 +1057,12 @@ AllocSetFree(MemoryContext context, void *pointer)
 		if (block->next)
 			block->next->prev = block->prev;
 
-		// Must be place before the wipe_mem
-		YbPgMemSubConsumption(block->endptr - ((char*)block));
+		/* Must be place before the wipe_mem wipes the content */
+		YbPgMemSubConsumption(ASET_BLOCK_TOTAL_SIZE(block));
 
 #ifdef CLOBBER_FREED_MEMORY
 		wipe_mem(block, block->freeptr - ((char *) block));
 #endif
-
 		free(block);
 	}
 	else

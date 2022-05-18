@@ -237,13 +237,25 @@ extern MemoryContext GenerationContextCreate(MemoryContext parent,
  */
 typedef struct YbPgMemTracker
 {
-	/* Current memory in bytes */
-	Size cur_mem_bytes;
-	/* The maximum memory since this backend connetion is established */
+	/*
+	 * Current, at time of cutting Snapshot(), memory in bytes allocated by PG
+	 * (pggate is not included in this field)
+	 */
+	Size pg_cur_mem_bytes;
+	/*
+	 * The maximum memory since this backend connetion is established including
+	 * PG and pggate
+	 */
 	Size backend_max_mem_bytes;
-	/* The maximum memory ever allocated by current statement */
+	/*
+	 * The maximum memory ever allocated by current statement including PG and
+	 * pggate
+	 */
 	Size stmt_max_mem_bytes;
-	/* The initial base memory already allocated by PG at the beginning of current statement */
+	/*
+	 * The initial base memory already allocated by PG and paggate at the
+	 * beginning of current statement
+	 */
 	Size stmt_max_mem_base_bytes;
 } YbPgMemTracker;
 

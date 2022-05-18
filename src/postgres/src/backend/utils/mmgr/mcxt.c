@@ -40,7 +40,7 @@ SnapshotMemory()
 {
 	int64_t cur_tc_actual_sz = 0;
 	YBCGetPgggateHeapConsumption(&cur_tc_actual_sz);
-	return PgMemTracker.cur_mem_bytes + cur_tc_actual_sz;
+	return PgMemTracker.pg_cur_mem_bytes + cur_tc_actual_sz;
 }
 
 void
@@ -57,24 +57,22 @@ YbPgMemUpdateMax()
 void
 YbPgMemAddConsumption(const Size sz)
 {
-	PgMemTracker.cur_mem_bytes += sz;
-	if (sz >= 0)
-	{
-		YbPgMemUpdateMax();
-	}
+	PgMemTracker.pg_cur_mem_bytes += sz;
+	/* Only update max memory when memory is increasing */
+	YbPgMemUpdateMax();
 }
 
 void
 YbPgMemSubConsumption(const Size sz)
 {
-	PgMemTracker.cur_mem_bytes -= sz;
+	PgMemTracker.pg_cur_mem_bytes -= sz;
 }
 
 void
 YbPgMemResetStmtConsumption()
 {
-	PgMemTracker.stmt_max_mem_base_bytes = PgMemTracker.cur_mem_bytes;
-	PgMemTracker.stmt_max_mem_bytes		 = 0;
+	PgMemTracker.stmt_max_mem_base_bytes = SnapshotMemory();
+	PgMemTracker.stmt_max_mem_bytes = 0;
 }
 
 /*****************************************************************************
