@@ -55,9 +55,9 @@ explain_get_index_name_hook_type explain_get_index_name_hook = NULL;
 #define X_CLOSE_IMMEDIATE 2
 #define X_NOWHITESPACE 4
 
-#define ONE_K 1024
-#define ONE_M (ONE_K * ONE_K)
-#define ONE_G (ONE_K * ONE_M)
+#define ONE_K		 1024
+#define ONE_M		 (ONE_K * ONE_K)
+#define ONE_G		 (ONE_K * ONE_M)
 #define CEILING_K(s) ((s + 1023) / ONE_K)
 
 static void ExplainOneQuery(Query *query, int cursorOptions,
@@ -3900,13 +3900,14 @@ appendPgMemInfo(ExplainState *es, Size peakMem)
  * Given a input size in bytes, return size along with readable unit (up to GiB)
  * in char*, rounded to the ceiling integral part.
  */
-static char*
+static char *
 ConvertToReadableBytes(Size bytes)
 {
 	/* 32 is enough to hold max Size plus unit */
 	const static Size MAX_LEN = 32;
-	char* buf = palloc0(MAX_LEN);
-	const char* unit;
+	char *buf = palloc0(MAX_LEN);
+
+	const char *unit;
 
 	// < 1MB
 	if (bytes < ONE_M)
@@ -3917,11 +3918,12 @@ ConvertToReadableBytes(Size bytes)
 	// < 1GB
 	else if (bytes < ONE_G)
 	{
-		bytes = CEILING_K(bytes/ONE_K);
+		bytes = CEILING_K(bytes / ONE_K);
 		unit = MIB;
 	}
-	else {
-		bytes = CEILING_K(bytes/ONE_M);
+	else
+	{
+		bytes = CEILING_K(bytes / ONE_M);
 		unit = GIB;
 	}
 	snprintf(buf, MAX_LEN, "%lu %s", bytes, unit);
