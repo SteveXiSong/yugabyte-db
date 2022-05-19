@@ -55,7 +55,10 @@ explain_get_index_name_hook_type explain_get_index_name_hook = NULL;
 #define X_CLOSE_IMMEDIATE 2
 #define X_NOWHITESPACE 4
 
-#define CEILING_K(s) ((s + 1023) / 1024)
+#define ONE_K 1024
+#define ONE_M (ONE_K * ONE_K)
+#define ONE_G (ONE_K * ONE_M)
+#define CEILING_K(s) ((s + 1023) / ONE_K)
 
 static void ExplainOneQuery(Query *query, int cursorOptions,
 				IntoClause *into, ExplainState *es,
@@ -135,7 +138,7 @@ static void ExplainXMLTag(const char *tagname, int flags, ExplainState *es);
 static void ExplainJSONLineEnding(ExplainState *es);
 static void ExplainYAMLLineStarting(ExplainState *es);
 static void escape_yaml(StringInfo buf, const char *str);
-static void ConvertToReadableBytes(Size *bytes, const char **unit);
+static char *ConvertToReadableBytes(Size bytes);
 static void appendPgMemInfo(ExplainState *es, Size peakMem);
 
 static const char *KIB = "KiB";
@@ -3888,39 +3891,39 @@ escape_yaml(StringInfo buf, const char *str)
 static void
 appendPgMemInfo(ExplainState *es, Size peakMem)
 {
-	const char *unit;
-	ConvertToReadableBytes(&peakMem, &unit);
-	appendStringInfo(es->str, "Maximum memory usage: %lu %s\n", peakMem,
-					 unit);
+	char *buf = ConvertToReadableBytes(peakMem);
+	appendStringInfo(es->str, "Maximum memory usage: %s\n", buf);
+	pfree(buf);
 }
 
 /*
- * Given a input size in bytes, return size in readable (up to GiB)
- * unit, rounded to the ceiling integral part.
+ * Given a input size in bytes, return size along with readable unit (up to GiB)
+ * in char*, rounded to the ceiling integral part.
  */
-static void
-ConvertToReadableBytes(Size *bytes, const char **unit)
+static char*
+ConvertToReadableBytes(Size bytes)
 {
-	Size rawbytes = *bytes;
+	/* 32 is enough to hold max Size plus unit */
+	const static Size MAX_LEN = 32;
+	char* buf = palloc0(MAX_LEN);
+	const char* unit;
 
-	*unit = KIB;
 	// < 1MB
-	if (rawbytes < 1024 * 1024)
+	if (bytes < ONE_M)
 	{
-		*bytes = CEILING_K(rawbytes);
-		return;
+		bytes = CEILING_K(bytes);
+		unit = KIB;
 	}
-
-	*unit = MIB;
-	rawbytes /= 1024;
 	// < 1GB
-	if (rawbytes < 1024 * 1024)
+	else if (bytes < ONE_G)
 	{
-		*bytes = CEILING_K(rawbytes);
-		return;
+		bytes = CEILING_K(bytes/ONE_K);
+		unit = MIB;
 	}
-
-	rawbytes /= 1024;
-	*unit  = GIB;
-	*bytes = CEILING_K(rawbytes);
+	else {
+		bytes = CEILING_K(bytes/ONE_M);
+		unit = GIB;
+	}
+	snprintf(buf, MAX_LEN, "%lu %s", bytes, unit);
+	return buf;
 }
