@@ -490,18 +490,15 @@ public class TestYsqlMetrics extends BasePgSQLTest {
       statement.execute("EXPLAIN ANALYZE UPDATE tst SET c1 = c1 + 1 WHERE c1 < 1000;");
       statement.execute("EXPLAIN ANALYZE DELETE FROM tst WHERE c1 < 1000;");
 
-      {
-        statement.execute("BEGIN;");
-        statement.execute("EXPLAIN ANALYZE DECLARE decl CURSOR FOR SELECT * FROM tst limit 1000;");
-        statement.execute("END;");
-      }
+      statement.execute("BEGIN;");
+      statement.execute("EXPLAIN ANALYZE DECLARE decl CURSOR FOR SELECT * FROM tst limit 1000;");
+      statement.execute("END;");
 
       statement.execute("EXPLAIN ANALYZE VALUES (1), (2), (3);");
-
-      /**
-       * TODO Add sanity tests for CREATE TABLE AS and CREATE MATERIALIZED VIEW AS. Since YB 2.8,
-       * there is a regression these statements no longer work.
-       */
+      statement.execute(
+        "EXPLAIN ANALYZE CREATE TABLE cre_tst AS SELECT * FROM tst limit 100;");
+      statement.execute(
+        "EXPLAIN ANALYZE CREATE MATERIALIZED VIEW cre_view AS SELECT * FROM tst limit 100;");
     }
   }
 
