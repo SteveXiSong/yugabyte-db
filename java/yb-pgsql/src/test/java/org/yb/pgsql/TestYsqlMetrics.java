@@ -522,23 +522,9 @@ public class TestYsqlMetrics extends BasePgSQLTest {
   private long findMaxMemInExplain(final ResultSet result) throws Exception {
     while(result.next()) {
       final String row = result.getString(1);
-      if (row.contains("Maximum memory usage")) {
+      if (row.contains("Peak Memory Usage")) {
         final String[] tks = row.split(" ");
         long maxMem = Long.valueOf(tks[tks.length - 2]);
-
-        final String memUnit = tks[tks.length - 1];
-        switch (memUnit) {
-          case "GiB":
-            maxMem *= 1024;
-            // fall through
-          case "MiB":
-            maxMem *= 1024;
-            // fall through
-          case "KiB":
-            maxMem *= 1024;
-            // fall through
-        }
-
         return maxMem;
       }
     }
