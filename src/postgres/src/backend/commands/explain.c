@@ -138,12 +138,7 @@ static void ExplainXMLTag(const char *tagname, int flags, ExplainState *es);
 static void ExplainJSONLineEnding(ExplainState *es);
 static void ExplainYAMLLineStarting(ExplainState *es);
 static void escape_yaml(StringInfo buf, const char *str);
-static char *ConvertToReadableBytes(Size bytes);
-static void appendPgMemInfo(ExplainState *es, Size peakMem);
-
-static const char *KIB = "KiB";
-static const char *MIB = "MiB";
-static const char *GIB = "GiB";
+static void appendPgMemInfo(ExplainState *es, const Size peakMem);
 
 /*
  * ExplainQuery -
@@ -3889,43 +3884,8 @@ escape_yaml(StringInfo buf, const char *str)
  * currently only the max memory info.
  */
 static void
-appendPgMemInfo(ExplainState *es, Size peakMem)
+appendPgMemInfo(ExplainState *es, const Size peakMem)
 {
-	char *buf = ConvertToReadableBytes(peakMem);
-	appendStringInfo(es->str, "Maximum memory usage: %s\n", buf);
-	pfree(buf);
-}
-
-/*
- * Given a input size in bytes, return size along with readable unit (up to GiB)
- * in char*, rounded to the ceiling integral part.
- */
-static char *
-ConvertToReadableBytes(Size bytes)
-{
-	/* 32 is enough to hold max Size plus unit */
-	const static Size MAX_LEN = 32;
-	char *buf = palloc0(MAX_LEN);
-
-	const char *unit;
-
-	// < 1MB
-	if (bytes < ONE_M)
-	{
-		bytes = CEILING_K(bytes);
-		unit = KIB;
-	}
-	// < 1GB
-	else if (bytes < ONE_G)
-	{
-		bytes = CEILING_K(bytes / ONE_K);
-		unit = MIB;
-	}
-	else
-	{
-		bytes = CEILING_K(bytes / ONE_M);
-		unit = GIB;
-	}
-	snprintf(buf, MAX_LEN, "%lu %s", bytes, unit);
-	return buf;
+	Size peakMemKb = CEILING_K(peakMem);
+	ExplainPropertyInteger("Peak Memory Usage", "kB", peakMemKb, es);
 }
