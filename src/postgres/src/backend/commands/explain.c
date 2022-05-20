@@ -55,10 +55,7 @@ explain_get_index_name_hook_type explain_get_index_name_hook = NULL;
 #define X_CLOSE_IMMEDIATE 2
 #define X_NOWHITESPACE 4
 
-#define ONE_K		 1024
-#define ONE_M		 (ONE_K * ONE_K)
-#define ONE_G		 (ONE_K * ONE_M)
-#define CEILING_K(s) ((s + 1023) / ONE_K)
+#define CEILING_K(s) ((s + 1023) / 1024)
 
 static void ExplainOneQuery(Query *query, int cursorOptions,
 				IntoClause *into, ExplainState *es,
