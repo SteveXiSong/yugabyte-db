@@ -397,8 +397,10 @@ Result<std::list<PgDocResult>> PgDocOp::ProcessResponseResult(
     }
     // Get total number of rows that are operated on.
     rows_affected_count_ += op_response->rows_affected_count();
-    total_scanned_docdb_rows +=
-        op_response->has_docdb_scanned_rows() ? op_response->docdb_scanned_rows() : 0;
+    if (op_response->has_stats()) {
+      const auto& stats = op_response->stats();
+      total_scanned_docdb_rows += stats.has_scanned_rows() ? stats.scanned_rows() : 0;
+    }
 
     // A single batch of requests almost always is directed to fetch data from a single tablet.
     // However, when tablets split, data can be sharded/distributed across multiple tablets.

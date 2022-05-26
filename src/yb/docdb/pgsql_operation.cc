@@ -1091,7 +1091,7 @@ Result<size_t> PgsqlReadOperation::ExecuteScalar(const YQLStorageIf& ql_storage,
   RETURN_NOT_OK(SetPagingStateIfNecessary(
       iter, fetched_rows, row_count_limit, scan_time_exceeded, *scan_schema,
       read_time, has_paging_state));
-  response_.set_docdb_scanned_rows(scanned_count);
+  response_.mutable_stats()->set_scanned_rows(scanned_count);
   return fetched_rows;
 }
 
@@ -1126,7 +1126,7 @@ Result<size_t> PgsqlReadOperation::ExecuteBatchYbctid(const YQLStorageIf& ql_sto
   // Set status for this batch.
   // Mark all rows were processed even in case some of the ybctids were not found.
   response_.set_batch_arg_count(request_.batch_arguments_size());
-  response_.set_docdb_scanned_rows(row_count);
+  response_.mutable_stats()->set_scanned_rows(row_count);
 
   return row_count;
 }
