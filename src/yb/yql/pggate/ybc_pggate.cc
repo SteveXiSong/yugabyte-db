@@ -230,6 +230,15 @@ YBCStatus YBCGetPgggateCurrentAllocatedBytes(int64_t *consumption) {
   return YBCStatusOK();
 }
 
+YBCStatus YBCGctcMalloc(const size_t release_bytes) {
+  #ifdef TCMALLOC_ENABLED
+    LOG(INFO) << "### Calling GcTcmalloc ";
+    //pgapi->GetMemTracker().DoGcTcmalloc();
+    MallocExtension::instance()->ReleaseToSystem(release_bytes);
+  #endif
+  return YBCStatusOK();
+}
+
 //--------------------------------------------------------------------------------------------------
 // DDL Statements.
 //--------------------------------------------------------------------------------------------------
