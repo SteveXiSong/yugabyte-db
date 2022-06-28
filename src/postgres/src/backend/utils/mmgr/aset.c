@@ -1065,7 +1065,9 @@ AllocSetFree(MemoryContext context, void *pointer)
 		wipe_mem(block, block->freeptr - ((char *) block));
 #endif
 		free(block);
-		YBCGctcMalloc(ASET_BLOCK_TOTAL_SIZE(block));
+		if (YBCGetTcFreeBytes() > 10 * 1024 * 1024) {
+			YBCGctcMalloc(ASET_BLOCK_TOTAL_SIZE(block));
+		}
 	}
 	else
 	{
