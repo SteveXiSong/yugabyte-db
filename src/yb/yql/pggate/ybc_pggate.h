@@ -69,6 +69,8 @@ const YBCPgCallbacks* YBCGetPgCallbacks();
 
 YBCStatus YBCGetPgggateCurrentAllocatedBytes(int64_t *consumption);
 
+YBCStatus YBCGctcMalloc(size_t release_bytes);
+
 //--------------------------------------------------------------------------------------------------
 // DDL Statements
 //--------------------------------------------------------------------------------------------------

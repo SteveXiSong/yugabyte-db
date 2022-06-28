@@ -389,7 +389,11 @@ class MemTracker : public std::enable_shared_from_this<MemTracker> {
 
   // Assign the functor to update PG's global memory consumption.
   void AssignUpdateMaxMemFunctor(void (*func)()) {
-      update_max_mem_functor_ = func;
+    update_max_mem_functor_ = func;
+  }
+
+  void DoGcTcmalloc() {
+    GcTcmalloc();
   }
 
  private:

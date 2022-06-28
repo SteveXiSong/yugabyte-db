@@ -48,6 +48,7 @@
 
 #include "utils/memdebug.h"
 #include "utils/memutils.h"
+#include "yb/yql/pggate/ybc_pggate.h"
 
 /* Define this to detail debug alloc information */
 /* #define HAVE_ALLOCINFO */
@@ -1064,6 +1065,7 @@ AllocSetFree(MemoryContext context, void *pointer)
 		wipe_mem(block, block->freeptr - ((char *) block));
 #endif
 		free(block);
+		YBCGctcMalloc(ASET_BLOCK_TOTAL_SIZE(block));
 	}
 	else
 	{
