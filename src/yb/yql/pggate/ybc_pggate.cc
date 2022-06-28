@@ -232,11 +232,23 @@ YBCStatus YBCGetPgggateCurrentAllocatedBytes(int64_t *consumption) {
 
 YBCStatus YBCGctcMalloc(const size_t release_bytes) {
   #ifdef TCMALLOC_ENABLED
-    LOG(INFO) << "### Calling GcTcmalloc ";
+    LOG(INFO) << "### Calling GcTcmalloc " << release_bytes
+      << " allocated " << pgapi->GetMemTracker().GetTCMallocProperty("generic.current_allocated_bytes")
+      << " heap_size " << pgapi->GetMemTracker().GetTCMallocProperty("generic.heap_size")
+      << " page_free " << pgapi->GetMemTracker().GetTCMallocProperty("tcmalloc.pageheap_free_bytes");
     //pgapi->GetMemTracker().DoGcTcmalloc();
     MallocExtension::instance()->ReleaseToSystem(release_bytes);
   #endif
   return YBCStatusOK();
+}
+
+size_t YBCGetTcFreeBytes() {
+  #ifdef TCMALLOC_ENABLED
+    size_t value = 0;
+    MallocExtension::instance()->GetNumericProperty("tcmalloc.pageheap_free_bytes", &value);
+    return value;
+  #endif
+  return 0;
 }
 
 //--------------------------------------------------------------------------------------------------
