@@ -73,7 +73,7 @@ const YBCPgCallbacks* YBCGetPgCallbacks();
 
 YBCStatus YBCGetPgggateCurrentAllocatedBytes(int64_t *consumption);
 
-YBCStatus YBCGctcMalloc(size_t release_bytes);
+YBCStatus YBCGctcMalloc(size_t *release_bytes);
 
 size_t YBCGetTcFreeBytes();
 
