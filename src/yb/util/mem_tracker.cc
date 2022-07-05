@@ -315,6 +315,8 @@ shared_ptr<MemTracker> MemTracker::CreateChild(int64_t byte_limit,
                                                MayExist may_exist,
                                                AddToParent add_to_parent,
                                                CreateMetrics create_metrics) {
+  LOG(INFO) << "### create child memtracker ";
+  LOG(INFO) << "### tcmalloc release rate " << MallocExtension::instance()->GetMemoryReleaseRate();
   std::lock_guard<std::mutex> lock(child_trackers_mutex_);
   if (may_exist) {
     auto result = FindChildUnlocked(id);
@@ -592,6 +594,8 @@ void MemTracker::Release(int64_t bytes) {
     Consume(-bytes);
     return;
   }
+  LOG(INFO) << "### memory released " << bytes;
+  LOG(INFO) << "### FLAG mem gc release bytes" << FLAGS_mem_tracker_tcmalloc_gc_release_bytes;
 
   if (PREDICT_FALSE(base::subtle::Barrier_AtomicIncrement(&released_memory_since_gc, bytes) >
                     GetAtomicFlag(&FLAGS_mem_tracker_tcmalloc_gc_release_bytes))) {
