@@ -224,20 +224,25 @@ YBCStatus YBCGctcMalloc(size_t *release_bytes) {
   #ifdef TCMALLOC_ENABLED
     //if (YBCGetTcFreeBytes() > 200 * 1024 * 1024) {
     if (*release_bytes > 10 * 1024 * 1024) {
-      LOG(INFO) << "### Calling GcTcmalloc " << *release_bytes;
+      //LOG(INFO) << "### Calling GcTcmalloc " << *release_bytes;
       /*
       LOG(INFO) << "### TCmalloc (before) "
         << "\n allocated " << pgapi->GetMemTracker().GetTCMallocProperty("generic.current_allocated_bytes")
         << "\n heap_size " << pgapi->GetMemTracker().GetTCMallocProperty("generic.heap_size")
         << "\n page_free " << pgapi->GetMemTracker().GetTCMallocProperty("tcmalloc.pageheap_free_bytes");
-        */
-      float factor = 0.8;
-      MallocExtension::instance()->ReleaseToSystem(*release_bytes * factor);
+      */
+      float factor = 0.9;
+      const auto tc_freed_bytes = YBCGetTcFreeBytes();
+      const auto to_release = std::min(tc_freed_bytes, *release_bytes) * factor;
+      MallocExtension::instance()->ReleaseToSystem(to_release);
+      /*
       LOG(INFO) << "### TCmalloc (after) "
         << "\n allocated " << pgapi->GetMemTracker().GetTCMallocProperty("generic.current_allocated_bytes")
         << "\n heap_size " << pgapi->GetMemTracker().GetTCMallocProperty("generic.heap_size")
-        << "\n page_free " << pgapi->GetMemTracker().GetTCMallocProperty("tcmalloc.pageheap_free_bytes");
-      *release_bytes = 0;
+        << "\n page_free " << pgapi->GetMemTracker().GetTCMallocProperty("tcmalloc.pageheap_free_bytes")
+        << "\n unmapped "  << pgapi->GetMemTracker().GetTCMallocProperty("tcmalloc.pageheap_unmapped_bytes");
+        */
+      *release_bytes -= to_release;
     }
   #endif
   return YBCStatusOK();
