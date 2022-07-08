@@ -433,10 +433,9 @@ public class TestYsqlMetrics extends BasePgSQLTest {
   }
 
   /**
-   * This test does basic memory stats verification in relative method.
-   * We don't verify the actual max memory values as they can be platform dependent.
-   * Instead, we verify that a small query's max memory usage output is smaller that a
-   * big query's.
+   * This test does memory stats verification in relative method.
+   * It validates the max memory ouput by comparing it to the sort memory usage, when the query
+   * has only a sorting besides a scan.
    * It also does basic tests to ensure the newly added cutomized logic
    * for memory stats doesn't break existing EXPLAIN ANALYZE's execution for DDLs.
    */
@@ -488,6 +487,20 @@ public class TestYsqlMetrics extends BasePgSQLTest {
         assertEquals(maxMemSimpleEnd, maxMemSimpleStart);
       }
 
+      // Run a accurate max-memory validation by including a single memory consumption operator
+      // like ORDER BY. Compare the operator's memory against the max memory consumption.
+      {
+        // Set the work_mem to a high value so that the memory doesn't get capped during testing.
+        statement.execute("SET work_mem=\"1000MB\";");
+        final ResultSet queryRs =
+          statement.executeQuery("EXPLAIN ANALYZE SELECT c1 FROM tst ORDER BY c1 LIMIT 1000000;");
+        final long sortMemKb = findSortMemUsageInExplain(queryRs);
+        final long maxMemKb = findMaxMemInExplain(queryRs);
+        assertTrue(maxMemKb > 0 && sortMemKb > 0);
+        // Validate that the max memory usage is within the expected range.
+        assertTrue(maxMemKb < sortMemKb * 1.1 && maxMemKb >= sortMemKb);
+      }
+
       // The following tests only verifies EXPLAIN ANALYZE can be properly executed
       // as the actual output values are highly platform dependent.
       statement.execute("EXPLAIN ANALYZE UPDATE tst SET c1 = c1 + 1 WHERE c1 < 1000;");
@@ -506,7 +519,7 @@ public class TestYsqlMetrics extends BasePgSQLTest {
   }
 
   /**
-   * Validate the EXPLAIN output, and return maximum memory consumption found.
+   * Validate the EXPLAIN ANALYZE output, and return maximum memory consumption found.
    **/
   private long runExplainAnalyze(Statement statement, final int limit) throws Exception {
     final String explainQuery = buildExplainAnalyzeDemoQuery(limit);
@@ -519,8 +532,8 @@ public class TestYsqlMetrics extends BasePgSQLTest {
   }
 
   /**
-   * Find the max memory in the EXPLAIN output in bytes. Throws exception if there is no max mem
-   * found.
+   * Find the max memory in the EXPLAIN ANALYZE output in kilo-bytes. Throws exception if there is
+   * no max mem found.
    */
   private long findMaxMemInExplain(final ResultSet result) throws Exception {
     while(result.next()) {
@@ -533,6 +546,24 @@ public class TestYsqlMetrics extends BasePgSQLTest {
     }
 
     throw new Exception("No max memory consumption found in the EXPLAIN output.");
+  }
+
+  /**
+   * Find the sort memory in the EXPLAIN ANALYZE output in kilo-bytes. Throws exception if there is
+   * no memory usage found.
+   */
+  private long findSortMemUsageInExplain(final ResultSet result) throws Exception {
+    while(result.next()) {
+      final String row = result.getString(1);
+      if (row.contains("Sort Method") && row.contains("Memory")) {
+        final String[] tks = row.split(" ");
+        final String kbs = tks[tks.length - 1];
+        final long memKb = Long.valueOf(kbs.replace("kB", ""));
+        return memKb;
+      }
+    }
+
+    throw new Exception("No sort memory consumption found in the EXPLAIN ANALYZE output.");
   }
 
   private void testStatement(Statement statement,
