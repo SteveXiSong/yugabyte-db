@@ -83,6 +83,7 @@ YbPgMemSubConsumption(const Size sz)
 	{
 		PgMemTracker.pg_cur_mem_bytes = 0;
 	}
+	PgMemTracker.freed_bytes_since_gc += sz;
 }
 
 void
