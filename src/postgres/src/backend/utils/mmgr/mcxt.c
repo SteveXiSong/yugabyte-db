@@ -34,13 +34,21 @@ YbPgMemTracker PgMemTracker = PG_MEM_TRACKER_INIT;
  * A helper function to take snapshot of current memory usage.
  * It includes current PG memory usage plus current Tcmalloc usage by
  * pggate.
+ * Extracting PgGate memory consumption is platform dependent.
+ * Using PG's memory context's consumption only if TCmalloc is not enabled.
+ * This will miss PgGate's memory consumption but it still shows a major portion
+ * of memory consumption during an execution.
  */
 static Size
 SnapshotMemory()
 {
+#ifdef TCMALLOC_ENABLED
 	int64_t cur_tc_actual_sz = 0;
 	YBCGetPgggateHeapConsumption(&cur_tc_actual_sz);
 	return cur_tc_actual_sz;
+#else
+	return PgMemTracker.pg_cur_mem_bytes;
+#endif
 }
 
 void
@@ -65,7 +73,15 @@ YbPgMemAddConsumption(const Size sz)
 void
 YbPgMemSubConsumption(const Size sz)
 {
-	PgMemTracker.pg_cur_mem_bytes -= sz;
+	// Avoid overflow when subtracting sz.
+	if (PgMemTracker.pg_cur_mem_bytes >= sz)
+	{
+		PgMemTracker.pg_cur_mem_bytes -= sz;
+	}
+	else
+	{
+		PgMemTracker.pg_cur_mem_bytes = 0;
+	}
 }
 
 void
