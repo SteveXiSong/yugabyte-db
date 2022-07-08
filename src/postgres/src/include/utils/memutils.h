@@ -257,6 +257,11 @@ typedef struct YbPgMemTracker
 	 * beginning of current statement
 	 */
 	Size stmt_max_mem_base_bytes;
+	/*
+	 * Tracks bytes freed since last Garbage Collection by TCmalloc.
+	 * When it is accumulated to a threshold, a GC will be triggered.
+	 */
+	Size freed_bytes_since_gc;
 } YbPgMemTracker;
 
 extern YbPgMemTracker PgMemTracker;

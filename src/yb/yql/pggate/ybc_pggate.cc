@@ -54,6 +54,8 @@
 
 DEFINE_int32(ysql_client_read_write_timeout_ms, -1, "Timeout for YSQL's yb-client read/write "
              "operations. Falls back on max(client_read_write_timeout_ms, 600s) if set to -1." );
+DEFINE_uint64(ysql_gc_threshold_bytes, 10 * 1024 * 1024,
+              "A threshold in bytes to trigger a garbage collection by TCmalloc.");
 DEFINE_int32(pggate_num_connections_to_server, 1,
              "Number of underlying connections to each server from a PostgreSQL backend process. "
              "This overrides the value of --num_connections_to_server.");
@@ -230,41 +232,14 @@ YBCStatus YBCGetPgggateCurrentAllocatedBytes(int64_t *consumption) {
   return YBCStatusOK();
 }
 
-YBCStatus YBCGctcMalloc(size_t *release_bytes) {
-  #ifdef TCMALLOC_ENABLED
-    //if (YBCGetTcFreeBytes() > 200 * 1024 * 1024) {
-    if (*release_bytes > 10 * 1024 * 1024) {
-      //LOG(INFO) << "### Calling GcTcmalloc " << *release_bytes;
-      /*
-      LOG(INFO) << "### TCmalloc (before) "
-        << "\n allocated " << pgapi->GetMemTracker().GetTCMallocProperty("generic.current_allocated_bytes")
-        << "\n heap_size " << pgapi->GetMemTracker().GetTCMallocProperty("generic.heap_size")
-        << "\n page_free " << pgapi->GetMemTracker().GetTCMallocProperty("tcmalloc.pageheap_free_bytes");
-      */
-      float factor = 0.9;
-      const auto tc_freed_bytes = YBCGetTcFreeBytes();
-      const auto to_release = std::min(tc_freed_bytes, *release_bytes) * factor;
-      MallocExtension::instance()->ReleaseToSystem(to_release);
-      /*
-      LOG(INFO) << "### TCmalloc (after) "
-        << "\n allocated " << pgapi->GetMemTracker().GetTCMallocProperty("generic.current_allocated_bytes")
-        << "\n heap_size " << pgapi->GetMemTracker().GetTCMallocProperty("generic.heap_size")
-        << "\n page_free " << pgapi->GetMemTracker().GetTCMallocProperty("tcmalloc.pageheap_free_bytes")
-        << "\n unmapped "  << pgapi->GetMemTracker().GetTCMallocProperty("tcmalloc.pageheap_unmapped_bytes");
-        */
-      *release_bytes -= to_release;
-    }
-  #endif
+YBCStatus YBCGcTcmalloc(size_t* released_bytes_since_gc) {
+#ifdef TCMALLOC_ENABLED
+  if (*released_bytes_since_gc > FLAGS_ysql_gc_threshold_bytes) {
+    MemTracker::GcTcmallocByChunks();
+    *released_bytes_since_gc = 0;
+  }
+#endif
   return YBCStatusOK();
-}
-
-size_t YBCGetTcFreeBytes() {
-  #ifdef TCMALLOC_ENABLED
-    size_t value = 0;
-    MallocExtension::instance()->GetNumericProperty("tcmalloc.pageheap_free_bytes", &value);
-    return value;
-  #endif
-  return 0;
 }
 
 //--------------------------------------------------------------------------------------------------

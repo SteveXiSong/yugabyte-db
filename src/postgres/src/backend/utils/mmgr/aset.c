@@ -112,6 +112,16 @@
  */
 #define ASET_INITIAL_TOTAL_SIZE(SET) (((AllocSetContext *) SET)->keeper->endptr - ((char *) SET))
 
+/*
+ * Try to call a garbage collection after a free() call. Depending on the GC threshold configured,
+ * if GC triggered, the free_bytes_since_gc will be reset.
+ */
+#define TRY_GARBAGE_COLLECTION \
+	do \
+	{ \
+		YBCGcTcmalloc(&PgMemTracker.freed_bytes_since_gc); \
+	} while (0)
+
 typedef struct AllocBlockData *AllocBlock;	/* forward reference */
 typedef struct AllocChunkData *AllocChunk;
 
@@ -120,8 +130,6 @@ typedef struct AllocChunkData *AllocChunk;
  *		Aligned pointer which may be a member of an allocation set.
  */
 typedef void *AllocPointer;
-
-size_t to_free = 0;
 
 /*
  * AllocSetContext is our standard implementation of MemoryContext.
@@ -623,14 +631,12 @@ AllocSetReset(MemoryContext context)
 		{
 			/* Normal case, release the block */
 			YbPgMemSubConsumption(ASET_BLOCK_TOTAL_SIZE(block));
-			//size_t to_free = ASET_BLOCK_TOTAL_SIZE(block);
-			to_free += ASET_BLOCK_TOTAL_SIZE(block);
 
 #ifdef CLOBBER_FREED_MEMORY
 			wipe_mem(block, block->freeptr - ((char *) block));
 #endif
 			free(block);
-			YBCGctcMalloc(&to_free);
+			TRY_GARBAGE_COLLECTION;
 		}
 		block = next;
 	}
@@ -680,7 +686,6 @@ AllocSetDelete(MemoryContext context)
 		 */
 		if (freelist->num_free >= MAX_FREE_CONTEXTS)
 		{
-			//size_t to_free = 0;
 			while (freelist->first_free != NULL)
 			{
 				AllocSetContext *oldset = freelist->first_free;
@@ -689,11 +694,10 @@ AllocSetDelete(MemoryContext context)
 				freelist->num_free--;
 
 				YbPgMemSubConsumption(ASET_INITIAL_TOTAL_SIZE(oldset));
-				to_free += ASET_INITIAL_TOTAL_SIZE(oldset);
 
 				/* All that remains is to free the header/initial block */
 				free(oldset);
-				YBCGctcMalloc(&to_free);
+				TRY_GARBAGE_COLLECTION;
 			}
 			Assert(freelist->num_free == 0);
 		}
@@ -706,7 +710,6 @@ AllocSetDelete(MemoryContext context)
 		return;
 	}
 
-	//size_t to_free = 0;
 	/* Free all blocks, except the keeper which is part of context header */
 	while (block != NULL)
 	{
@@ -719,7 +722,6 @@ AllocSetDelete(MemoryContext context)
 		if (block != set->keeper)
 		{
 			YbPgMemSubConsumption(ASET_BLOCK_TOTAL_SIZE(block));
-			to_free += ASET_BLOCK_TOTAL_SIZE(block);
 			free(block);
 		}
 
@@ -727,10 +729,9 @@ AllocSetDelete(MemoryContext context)
 	}
 
 	YbPgMemSubConsumption(ASET_INITIAL_TOTAL_SIZE(set));
-	to_free += ASET_INITIAL_TOTAL_SIZE(set);
 	/* Finally, free the context header, including the keeper block */
 	free(set);
-	YBCGctcMalloc(&to_free);
+	TRY_GARBAGE_COLLECTION;
 }
 
 /*
@@ -1072,14 +1073,12 @@ AllocSetFree(MemoryContext context, void *pointer)
 
 		/* Must be place before the wipe_mem wipes the content */
 		YbPgMemSubConsumption(ASET_BLOCK_TOTAL_SIZE(block));
-		//size_t to_free = ASET_BLOCK_TOTAL_SIZE(block);
-		to_free += ASET_BLOCK_TOTAL_SIZE(block);
 
 #ifdef CLOBBER_FREED_MEMORY
 		wipe_mem(block, block->freeptr - ((char *) block));
 #endif
 		free(block);
-		YBCGctcMalloc(&to_free);
+		TRY_GARBAGE_COLLECTION;
 	}
 	else
 	{
