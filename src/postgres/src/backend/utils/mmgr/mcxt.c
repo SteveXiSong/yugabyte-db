@@ -40,7 +40,7 @@ SnapshotMemory()
 {
 	int64_t cur_tc_actual_sz = 0;
 	YBCGetPgggateHeapConsumption(&cur_tc_actual_sz);
-	return PgMemTracker.pg_cur_mem_bytes + cur_tc_actual_sz;
+	return cur_tc_actual_sz;
 }
 
 void
