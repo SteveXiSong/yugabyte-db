@@ -2381,7 +2381,7 @@ static struct config_int ConfigureNamesInt[] =
 			GUC_UNIT_KB
 		},
 		&work_mem,
-		4096, 64, MAX_KILOBYTES,
+		10 * 1024 * 1024, 64, MAX_KILOBYTES,
 		NULL, NULL, NULL
 	},
 
