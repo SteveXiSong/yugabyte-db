@@ -227,7 +227,7 @@ extern MemoryContext GenerationContextCreate(MemoryContext parent,
 
 #define PG_MEM_TRACKER_INIT \
 	{ \
-		0, 0, 0, 0 \
+		0, 0, 0, 0, 0 \
 	}
 
 /*
@@ -291,5 +291,7 @@ extern void YbPgMemSubConsumption(const Size sz);
  * track peak memory usage for a new statement.
  */
 extern void YbPgMemResetStmtConsumption();
+
+extern void YbGcTcmalloc();
 
 #endif							/* MEMUTILS_H */

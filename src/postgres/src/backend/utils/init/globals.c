@@ -126,6 +126,7 @@ bool		allowSystemTableMods = false;
 int			work_mem = 1024;
 int			maintenance_work_mem = 16384;
 int			max_parallel_maintenance_workers = 2;
+int			yb_pg_mem_gc_threshold = 10 * 1024; /* 10MB by default */
 
 /*
  * Primary determinants of sizes of shared-memory structures.

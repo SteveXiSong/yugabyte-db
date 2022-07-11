@@ -54,8 +54,6 @@
 
 DEFINE_int32(ysql_client_read_write_timeout_ms, -1, "Timeout for YSQL's yb-client read/write "
              "operations. Falls back on max(client_read_write_timeout_ms, 600s) if set to -1." );
-DEFINE_uint64(ysql_gc_threshold_bytes, 10 * 1024 * 1024,
-              "A threshold in bytes to trigger a garbage collection by TCmalloc.");
 DEFINE_int32(pggate_num_connections_to_server, 1,
              "Number of underlying connections to each server from a PostgreSQL backend process. "
              "This overrides the value of --num_connections_to_server.");
@@ -232,12 +230,9 @@ YBCStatus YBCGetPgggateCurrentAllocatedBytes(int64_t *consumption) {
   return YBCStatusOK();
 }
 
-YBCStatus YBCGcTcmalloc(size_t* released_bytes_since_gc) {
+YBCStatus YBCGcTcmalloc() {
 #ifdef TCMALLOC_ENABLED
-  if (*released_bytes_since_gc > FLAGS_ysql_gc_threshold_bytes) {
     MemTracker::GcTcmallocByChunks();
-    *released_bytes_since_gc = 0;
-  }
 #endif
   return YBCStatusOK();
 }

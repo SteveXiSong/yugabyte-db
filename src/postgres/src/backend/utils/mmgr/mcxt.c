@@ -93,6 +93,16 @@ YbPgMemResetStmtConsumption()
 	PgMemTracker.stmt_max_mem_bytes = 0;
 }
 
+void
+YbGcTcmalloc()
+{
+	if (PgMemTracker.freed_bytes_since_gc > (yb_pg_mem_gc_threshold * 1024))
+	{
+		YBCGcTcmalloc();
+		PgMemTracker.freed_bytes_since_gc = 0;
+	}
+}
+
 /*****************************************************************************
  *	  GLOBAL MEMORY															 *
  *****************************************************************************/

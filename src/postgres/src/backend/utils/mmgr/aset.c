@@ -119,7 +119,7 @@
 #define TRY_GARBAGE_COLLECTION \
 	do \
 	{ \
-		YBCGcTcmalloc(&PgMemTracker.freed_bytes_since_gc); \
+		YbGcTcmalloc(); \
 	} while (0)
 
 typedef struct AllocBlockData *AllocBlock;	/* forward reference */
