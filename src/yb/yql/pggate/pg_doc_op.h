@@ -305,6 +305,10 @@ class PgDocOp : public std::enable_shared_from_this<PgDocOp> {
 
   const PgTable& table() const { return table_; }
 
+  uint64_t GetScannedDocRows() const {
+    return total_scanned_docdb_rows;
+  }
+
  protected:
   uint64_t& GetInTxnLimit();
 

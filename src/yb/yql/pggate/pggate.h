@@ -502,6 +502,8 @@ class PgApiImpl {
 
   Status ExecSelect(PgStatement *handle, const PgExecParameters *exec_params);
 
+  Status RetrieveSelectStats(PgStatement *handle, YBCSelectStats* stats);
+
   //------------------------------------------------------------------------------------------------
   // Analyze.
   Status NewSample(const PgObjectId& table_id,

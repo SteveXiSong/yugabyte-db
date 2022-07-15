@@ -1497,6 +1497,12 @@ Status PgApiImpl::ExecSelect(PgStatement *handle, const PgExecParameters *exec_p
   return dml_read.Exec(exec_params);
 }
 
+Status PgApiImpl::RetrieveSelectStats(PgStatement *handle, YBCSelectStats* stats) {
+  auto& dml_read = *down_cast<PgDmlRead*>(handle);
+  stats->docdb_table_scanned_row_count = dml_read.GetScannedDocRows();
+  return Status::OK();
+}
+
 //--------------------------------------------------------------------------------------------------
 // Expressions.
 //--------------------------------------------------------------------------------------------------

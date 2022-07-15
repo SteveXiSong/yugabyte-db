@@ -723,6 +723,14 @@ ybcExplainForeignScan(ForeignScanState *node, ExplainState *es)
 {
 	if (node->yb_fdw_aggs != NIL)
 		ExplainPropertyBool("Partial Aggregate", true, es);
+
+	YbFdwExecState *ybc_state = (YbFdwExecState *) node->fdw_state;
+	YBCPgStatement handle = ybc_state->handle;
+	YBCSelectStats stats;
+	YBCPgRetrieveSelectStats(handle, &stats);
+	uint64_t rows = stats.docdb_table_scanned_row_count;
+	node->ss.ps.instrument->docdb_scanned_row_count = rows;
+	ExplainPropertyInteger("DocDb Scanned Rows", NULL, rows, es);
 }
 
 /* ------------------------------------------------------------------------- */

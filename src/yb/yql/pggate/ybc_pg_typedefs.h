@@ -315,6 +315,11 @@ typedef struct PgExecParameters {
 #endif
 } YBCPgExecParameters;
 
+typedef struct SelectStats {
+  uint64_t docdb_table_scanned_row_count;
+  uint64_t docdb_index_scanned_row_count;
+} YBCSelectStats;
+
 typedef struct PgCollationInfo {
   bool collate_is_valid_non_c;
   const char *sortkey;

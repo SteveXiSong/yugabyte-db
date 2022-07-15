@@ -406,6 +406,7 @@ Result<bool> PgDml::FetchDataFromServer() {
 
 Result<bool> PgDml::GetNextRow(PgTuple *pg_tuple) {
   for (;;) {
+    LOG(INFO) << "### rowset size: " << rowsets_.size() << " cur_row_order_: " << current_row_order_;
     for (auto rowset_iter = rowsets_.begin(); rowset_iter != rowsets_.end();) {
       // Check if the rowset has any data.
       auto& rowset = *rowset_iter;

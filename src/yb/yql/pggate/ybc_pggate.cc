@@ -919,6 +919,10 @@ YBCStatus YBCPgExecSelect(YBCPgStatement handle, const YBCPgExecParameters *exec
   return ToYBCStatus(pgapi->ExecSelect(handle, exec_params));
 }
 
+YBCStatus YBCPgRetrieveSelectStats(YBCPgStatement handle, YBCSelectStats* stats) {
+  return ToYBCStatus(pgapi->RetrieveSelectStats(handle, stats));
+}
+
 //--------------------------------------------------------------------------------------------------
 // Expression Operations
 //--------------------------------------------------------------------------------------------------
