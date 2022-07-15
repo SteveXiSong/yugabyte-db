@@ -62,7 +62,7 @@ typedef struct Instrumentation
 	double		nfiltered1;		/* # tuples removed by scanqual or joinqual */
 	double		nfiltered2;		/* # tuples removed by "other" quals */
 	BufferUsage bufusage;		/* Total buffer usage */
-	long docdb_scanned_row_count;
+	long 		docdb_scanned_row_count;
 } Instrumentation;
 
 typedef struct WorkerInstrumentation
