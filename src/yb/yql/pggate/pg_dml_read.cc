@@ -789,5 +789,12 @@ bool PgDmlRead::IsIndexOrderedScan() const {
       !secondary_index_query_->IsAllPrimaryKeysBound(0 /* num_range_components_in_expected */);
 }
 
+void PgDmlRead::GetScannedDocRows(YBCSelectStats* stats) {
+  if (secondary_index_query_) {
+    stats->docdb_index_scanned_row_count = secondary_index_query_->getScannedIndexRows();
+  }
+  stats->docdb_table_scanned_row_count = doc_op_->GetScannedDocRows();
+}
+
 }  // namespace pggate
 }  // namespace yb

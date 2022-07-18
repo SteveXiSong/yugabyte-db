@@ -2297,6 +2297,14 @@ HeapTuple YBCFetchTuple(Relation relation, Datum ybctid)
 		}
 		tuple->t_tableOid = RelationGetRelid(relation);
 	}
+
+	YBCSelectStats stats;
+	YBCPgRetrieveSelectStats(ybc_stmt, &stats);
+	uint64_t rows = stats.docdb_table_scanned_row_count;
+	relation->actual_table_scanned_rows += rows;
+	ereport(INFO, (errmsg("### actual table read rows: %lu total: %lu\n", rows,
+						  relation->actual_table_scanned_rows)));
+
 	pfree(values);
 	pfree(nulls);
 	YBCPgDeleteStatement(ybc_stmt);

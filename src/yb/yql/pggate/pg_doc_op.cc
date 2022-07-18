@@ -270,7 +270,6 @@ Status PgDocOp::GetResult(list<PgDocResult> *rowsets) {
     DCHECK(response_.Valid());
     auto result = response_.Get();
     auto rows = VERIFY_RESULT(ProcessResponse(result));
-    VLOG(1) << "Accumulated scanned rows in DocDb: " << total_scanned_docdb_rows;
 
     // In case ProcessResponse doesn't fail with an error
     // it should return non empty rows and/or set end_of_data_.

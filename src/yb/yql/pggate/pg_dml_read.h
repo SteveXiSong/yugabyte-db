@@ -109,9 +109,7 @@ class PgDmlRead : public PgDml {
 
   bool IsIndexOrderedScan() const;
 
-  uint64 GetScannedDocRows() const {
-    return doc_op_->GetScannedDocRows();
-  }
+  void GetScannedDocRows(YBCSelectStats* stats);
 
  protected:
   // Allocate column protobuf.

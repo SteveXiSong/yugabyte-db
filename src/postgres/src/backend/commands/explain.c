@@ -139,6 +139,7 @@ static void ExplainYAMLLineStarting(ExplainState *es);
 static void escape_yaml(StringInfo buf, const char *str);
 static void appendPgMemInfo(ExplainState *es, const Size peakMem);
 static void ExplainIndexOnlyScanRows(IndexOnlyScanState *node, ExplainState* es);
+static void ExplainIndexScanRows(IndexScanState *node, ExplainState* es);
 
 
 /*
@@ -1539,6 +1540,10 @@ ExplainNode(PlanState *planstate, List *ancestors,
 			if (plan->qual)
 				show_instrumentation_count("Rows Removed by Filter", 1,
 										   planstate, es);
+			if (es->analyze) 
+			{
+				ExplainIndexScanRows((IndexScanState*) planstate, es);
+			}
 			break;
 		case T_IndexOnlyScan:
 			show_scan_qual(((IndexOnlyScan *) plan)->indexqual,
@@ -3907,4 +3912,21 @@ ExplainIndexOnlyScanRows(IndexOnlyScanState *node, ExplainState* es)
 	uint64_t rows = stats.docdb_table_scanned_row_count;
 	node->ss.ps.instrument->docdb_scanned_row_count = rows;
 	ExplainPropertyInteger("DocDb Scanned Index Rows", NULL, rows, es);
+}
+
+static void
+ExplainIndexScanRows(IndexScanState *node, ExplainState *es)
+{
+	IndexScanDesc  ioss_desc = node->iss_ScanDesc;
+	YbScanDesc	   ybscan = (YbScanDesc) ioss_desc->opaque;
+	YBCPgStatement handle = ybscan->handle;
+	YBCSelectStats stats;
+	YBCPgRetrieveSelectStats(handle, &stats);
+	uint64_t irows = stats.docdb_index_scanned_row_count;
+	ExplainPropertyInteger("DocDb Scanned Index Rows", NULL, irows, es);
+
+	uint64_t rows = stats.docdb_table_scanned_row_count != 0 ?
+						stats.docdb_table_scanned_row_count :
+						ybscan->relation->actual_table_scanned_rows;
+	ExplainPropertyInteger("DocDb Scanned Rows", NULL, rows, es);
 }

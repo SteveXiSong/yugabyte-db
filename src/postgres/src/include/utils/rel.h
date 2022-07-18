@@ -192,6 +192,8 @@ typedef struct RelationData
 	struct PgStat_TableStatus *pgstat_info; /* statistics collection area */
 
 	YbTableProperties yb_table_properties; /* NULL if not loaded */
+
+	size_t actual_table_scanned_rows;
 } RelationData;
 
 

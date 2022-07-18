@@ -1499,13 +1499,7 @@ Status PgApiImpl::ExecSelect(PgStatement *handle, const PgExecParameters *exec_p
 
 Status PgApiImpl::RetrieveSelectStats(PgStatement *handle, YBCSelectStats* stats) {
   auto& dml_read = *down_cast<PgDmlRead*>(handle);
-  stats->docdb_table_scanned_row_count = dml_read.GetScannedDocRows();
-  return Status::OK();
-}
-
-Status PgApiImpl::RetrieveDmlStats(PgStatement *handle, YBCSelectStats* stats) {
-  auto& dml_read = *down_cast<PgDmlRead*>(handle);
-  stats->docdb_table_scanned_row_count = dml_read.GetScannedDocRows();
+  dml_read.GetScannedDocRows(stats);
   return Status::OK();
 }
 
