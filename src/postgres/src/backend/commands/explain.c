@@ -14,6 +14,8 @@
 #include "postgres.h"
 
 #include "access/xact.h"
+#include "access/yb_scan.h"
+#include "access/relscan.h"
 #include "catalog/pg_collation.h"
 #include "catalog/pg_type.h"
 #include "commands/createas.h"
@@ -136,6 +138,7 @@ static void ExplainJSONLineEnding(ExplainState *es);
 static void ExplainYAMLLineStarting(ExplainState *es);
 static void escape_yaml(StringInfo buf, const char *str);
 static void appendPgMemInfo(ExplainState *es, const Size peakMem);
+static void ExplainIndexOnlyScanRows(IndexOnlyScanState *node, ExplainState* es);
 
 
 /*
@@ -1549,9 +1552,13 @@ ExplainNode(PlanState *planstate, List *ancestors,
 			if (plan->qual)
 				show_instrumentation_count("Rows Removed by Filter", 1,
 										   planstate, es);
-			if (es->analyze)
+			if (es->analyze) 
+			{
 				ExplainPropertyFloat("Heap Fetches", NULL,
 									 planstate->instrument->ntuples2, 0, es);
+
+				ExplainIndexOnlyScanRows((IndexOnlyScanState*)planstate, es);
+			}
 			break;
 		case T_BitmapIndexScan:
 			show_scan_qual(((BitmapIndexScan *) plan)->indexqualorig,
@@ -3887,4 +3894,17 @@ appendPgMemInfo(ExplainState *es, const Size peakMem)
 {
 	Size peakMemKb = CEILING_K(peakMem);
 	ExplainPropertyInteger("Peak Memory Usage", "kB", peakMemKb, es);
+}
+
+static void
+ExplainIndexOnlyScanRows(IndexOnlyScanState *node, ExplainState* es)
+{
+	IndexScanDesc  ioss_desc = node->ioss_ScanDesc;
+	YbScanDesc	   ybscan = (YbScanDesc) ioss_desc->opaque;
+	YBCPgStatement handle = ybscan->handle;
+	YBCSelectStats stats;
+	YBCPgRetrieveSelectStats(handle, &stats);
+	uint64_t rows = stats.docdb_table_scanned_row_count;
+	node->ss.ps.instrument->docdb_scanned_row_count = rows;
+	ExplainPropertyInteger("DocDb Scanned Index Rows", NULL, rows, es);
 }

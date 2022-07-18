@@ -504,6 +504,8 @@ class PgApiImpl {
 
   Status RetrieveSelectStats(PgStatement *handle, YBCSelectStats* stats);
 
+  Status RetrieveDmlStats(PgStatement *handle, YBCSelectStats* stats);
+
   //------------------------------------------------------------------------------------------------
   // Analyze.
   Status NewSample(const PgObjectId& table_id,
