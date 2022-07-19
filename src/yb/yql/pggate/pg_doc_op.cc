@@ -582,6 +582,7 @@ Status PgDocReadOp::DoPopulateDmlByYbctidOps(const YbctidGenerator& generator) {
     if (ybctid.empty()) {
       break;
     }
+
     // Find partition. The partition index is the boundary order minus 1.
     // - For hash partitioning, we use hashcode to find the right index.
     // - For range partitioning, we pass partition key to seek the index.
@@ -589,6 +590,8 @@ Status PgDocReadOp::DoPopulateDmlByYbctidOps(const YbctidGenerator& generator) {
 
     // Assign ybctids to operators.
     auto& read_req = GetReadReq(partition);
+
+    LOG(INFO) << "### ybctid " << ybctid << " partition " << partition;
 
     // Append ybctid and its order to batch_arguments.
     // The "ybctid" values are returned in the same order as the row in the IndexTable. To keep
