@@ -2399,11 +2399,10 @@ static struct config_int ConfigureNamesInt[] =
 	{
 		{"yb_pg_mem_gc_threshold", PGC_USERSET, RESOURCES_MEM,
 			gettext_noop("Set the garbage collection threshold for PG."),
-			gettext_noop("Set the garbage collocation threahold for PG."
-						 "Yugabyte's PG layer uses TCmalloc when available."
-						 "The freed bytes might not be released to the OS immediately."
-						 "When this threshold is reached, a release call will be called"
-						 "to release freed bytes to the OS."),
+			gettext_noop("Yugabyte's PG layer uses TCmalloc when available."
+						 "The freed bytes can be cached in TCmalloc, which still occupies RSS."
+						 "When this threshold is reached, a release call will be called, and an"
+						 "attempt to release the freed bytes to the OS will be done."),
 			GUC_UNIT_KB
 		},
 		&yb_pg_mem_gc_threshold,

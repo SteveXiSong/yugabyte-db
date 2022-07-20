@@ -48,7 +48,6 @@
 
 #include "utils/memdebug.h"
 #include "utils/memutils.h"
-#include "yb/yql/pggate/ybc_pggate.h"
 
 /* Define this to detail debug alloc information */
 /* #define HAVE_ALLOCINFO */
@@ -112,15 +111,6 @@
  */
 #define ASET_INITIAL_TOTAL_SIZE(SET) (((AllocSetContext *) SET)->keeper->endptr - ((char *) SET))
 
-/*
- * Try to call a garbage collection after a free() call. Depending on the GC threshold configured,
- * if GC triggered, the free_bytes_since_gc will be reset.
- */
-#define TRY_GARBAGE_COLLECTION \
-	do \
-	{ \
-		YbGcTcmalloc(); \
-	} while (0)
 
 typedef struct AllocBlockData *AllocBlock;	/* forward reference */
 typedef struct AllocChunkData *AllocChunk;
@@ -636,7 +626,7 @@ AllocSetReset(MemoryContext context)
 			wipe_mem(block, block->freeptr - ((char *) block));
 #endif
 			free(block);
-			TRY_GARBAGE_COLLECTION;
+			YbTryGc();
 		}
 		block = next;
 	}
@@ -697,7 +687,7 @@ AllocSetDelete(MemoryContext context)
 
 				/* All that remains is to free the header/initial block */
 				free(oldset);
-				TRY_GARBAGE_COLLECTION;
+				YbTryGc();
 			}
 			Assert(freelist->num_free == 0);
 		}
@@ -731,7 +721,7 @@ AllocSetDelete(MemoryContext context)
 	YbPgMemSubConsumption(ASET_INITIAL_TOTAL_SIZE(set));
 	/* Finally, free the context header, including the keeper block */
 	free(set);
-	TRY_GARBAGE_COLLECTION;
+	YbTryGc();
 }
 
 /*
@@ -1078,7 +1068,7 @@ AllocSetFree(MemoryContext context, void *pointer)
 		wipe_mem(block, block->freeptr - ((char *) block));
 #endif
 		free(block);
-		TRY_GARBAGE_COLLECTION;
+		YbTryGc();
 	}
 	else
 	{
