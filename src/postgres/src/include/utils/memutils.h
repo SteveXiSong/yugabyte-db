@@ -292,6 +292,11 @@ extern void YbPgMemSubConsumption(const Size sz);
  */
 extern void YbPgMemResetStmtConsumption();
 
-extern void YbGcTcmalloc();
+/*
+ * Try to call a garbage collection after a free() call. Depending on the GC threshold configured,
+ * if GC triggered, the free_bytes_since_gc will be reset.
+ * Return true if GC on TCmalloc is triggered.
+ */
+extern bool YbTryGc();
 
 #endif							/* MEMUTILS_H */

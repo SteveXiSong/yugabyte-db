@@ -308,6 +308,7 @@ SlabReset(MemoryContext context)
 
 			YbPgMemSubConsumption(slab->blockSize);
 			free(block);
+			YbTryGc();
 			slab->nblocks--;
 		}
 	}
@@ -328,9 +329,9 @@ SlabDelete(MemoryContext context)
 	SlabReset(context);
 
 	YbPgMemSubConsumption(((SlabContext *) context)->headerSize);
-
 	/* And free the context header */
 	free(context);
+	YbTryGc();
 }
 
 /*
@@ -563,8 +564,8 @@ SlabFree(MemoryContext context, void *pointer)
 	if (block->nfree == slab->chunksPerBlock)
 	{
 		YbPgMemSubConsumption(slab->blockSize);
-
 		free(block);
+		YbTryGc();
 		slab->nblocks--;
 	}
 	else

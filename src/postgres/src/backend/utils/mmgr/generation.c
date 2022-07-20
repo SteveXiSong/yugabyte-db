@@ -306,6 +306,7 @@ GenerationReset(MemoryContext context)
 		YbPgMemSubConsumption(block->endptr - ((char *) block));
 
 		free(block);
+		YbTryGc();
 	}
 
 	set->block = NULL;
@@ -327,6 +328,7 @@ GenerationDelete(MemoryContext context)
 
 	/* And free the context header */
 	free(context);
+	YbTryGc();
 }
 
 /*
@@ -535,6 +537,7 @@ GenerationFree(MemoryContext context, void *pointer)
 
 	YbPgMemSubConsumption(block->blksize);
 	free(block);
+	YbTryGc();
 }
 
 /*
