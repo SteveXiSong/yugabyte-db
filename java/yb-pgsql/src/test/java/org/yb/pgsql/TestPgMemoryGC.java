@@ -1,7 +1,6 @@
 package org.yb.pgsql;
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
@@ -10,13 +9,10 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.sql.ResultSet;
 import java.sql.Statement;
-import java.util.Arrays;
 import java.util.List;
-import java.util.stream.Collector;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import org.junit.Assert;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.yb.util.YBTestRunnerNonTsanOnly;
@@ -27,6 +23,9 @@ public class TestPgMemoryGC extends BasePgSQLTest {
   private static final String PROC_STATUS_FILE_PATH = "/proc/%s/status";
   private static final String PROC_RSS_FIELD_NAME = "VmRSS";
 
+  /*
+   * Verify that the freed memory allocated by a query is released to OS.
+   */
   @Test
   public void testMetrics() throws Exception {
     try (Statement stmt = connection.createStatement()) {
@@ -60,6 +59,9 @@ public class TestPgMemoryGC extends BasePgSQLTest {
     return pid;
   }
 
+  /*
+   * A helper method to get the current RSS memory for a PID.
+   */
   private long getRssForPid(final String pid) throws Exception {
     final Path procFilePath = Paths.get(String.format(PROC_STATUS_FILE_PATH, pid));
     assertTrue(Files.exists(procFilePath));
