@@ -22,6 +22,8 @@ public class TestPgMemoryGC extends BasePgSQLTest {
 
   private static final String PROC_STATUS_FILE_PATH = "/proc/%s/status";
   private static final String PROC_RSS_FIELD_NAME = "VmRSS";
+  private static final String DEFAULT_YB_PG_GC_THRESHOLD = "5MB";
+  private static final long RSS_ACCEPTED_DIFF_AFTER_GC_BYTES = 10 * 1024;
 
   /*
    * Verify that the freed memory allocated by a query is released to OS.
@@ -33,6 +35,12 @@ public class TestPgMemoryGC extends BasePgSQLTest {
         stmt.execute("INSERT INTO tst SELECT x, x+1, x+2 FROM GENERATE_SERIES(1, 1000000) x;");
 
         stmt.execute("SET work_mem=\"1GB\";");
+
+        ResultSet thresholdRs = stmt.executeQuery("SHOW yb_pg_mem_gc_threshold;");
+        assertTrue(thresholdRs.next());
+        String threshold = thresholdRs.getString(1);
+        assertEquals(threshold, DEFAULT_YB_PG_GC_THRESHOLD);
+
         final String pg_pid = getPgPid(stmt);
         long rssBefore = getRssForPid(pg_pid);
         // For quick sorting 1M rows, it takes around 78MB memory.
@@ -41,7 +49,16 @@ public class TestPgMemoryGC extends BasePgSQLTest {
         long rssAfter = getRssForPid(pg_pid);
 
         assertTrue("Freed bytes should be freed when GC threshold is reached",
-            (rssAfter - rssBefore) < 10 * 1024);
+            (rssAfter - rssBefore) < RSS_ACCEPTED_DIFF_AFTER_GC_BYTES);
+
+        // Make sure no memory leak, freed memory recycled even after multiple queries.
+        for(int i = 0; i < 10; ++i) {
+          stmt.executeQuery("SELECT * FROM tst ORDER BY c2;");
+        }
+
+        rssAfter = getRssForPid(pg_pid);
+        assertTrue("Freed bytes should be freed when GC threshold is reached",
+            (rssAfter - rssBefore) < RSS_ACCEPTED_DIFF_AFTER_GC_BYTES);
     }
   }
 
