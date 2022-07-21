@@ -2406,7 +2406,7 @@ static struct config_int ConfigureNamesInt[] =
 			GUC_UNIT_KB
 		},
 		&yb_pg_mem_gc_threshold,
-		5 * 1024, 1024, MAX_KILOBYTES,
+		100 * 1024, 1024, MAX_KILOBYTES,
 		NULL, NULL, NULL
 	},
 
