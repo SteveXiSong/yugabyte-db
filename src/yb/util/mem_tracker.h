@@ -432,7 +432,6 @@ class MemTracker : public std::enable_shared_from_this<MemTracker> {
   const int64_t soft_limit_;
   const std::string id_;
   const ConsumptionFunctor consumption_functor_;
-  UpdateMaxMemoryFunctor update_max_mem_functor_;
 
   PollChildrenConsumptionFunctors poll_children_consumption_functors_;
   const std::string descr_;
