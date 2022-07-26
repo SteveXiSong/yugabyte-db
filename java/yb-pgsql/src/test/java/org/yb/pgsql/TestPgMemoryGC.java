@@ -4,6 +4,8 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -15,6 +17,7 @@ import java.util.stream.Stream;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.yb.util.CoreFileUtil;
 import org.yb.util.YBTestRunnerNonTsanOnly;
 
 @RunWith(value=YBTestRunnerNonTsanOnly.class)
@@ -22,7 +25,7 @@ public class TestPgMemoryGC extends BasePgSQLTest {
 
   private static final String PROC_STATUS_FILE_PATH = "/proc/%s/status";
   private static final String PROC_RSS_FIELD_NAME = "VmRSS";
-  private static final String DEFAULT_YB_PG_GC_THRESHOLD = "5MB";
+  private static final String DEFAULT_YB_PG_GC_THRESHOLD = "10MB";
   private static final long RSS_ACCEPTED_DIFF_AFTER_GC_BYTES = 10 * 1024;
 
   /*
@@ -30,12 +33,18 @@ public class TestPgMemoryGC extends BasePgSQLTest {
    */
   @Test
   public void testMetrics() throws Exception {
+    // This is specically for Linux platforms. MAC doesn't use TCmalloc.
+    if (CoreFileUtil.IS_MAC) {
+      return;
+    }
+
     try (Statement stmt = connection.createStatement()) {
         stmt.execute("CREATE TABLE tst (c1 INT PRIMARY KEY, c2 INT, c3 INT);");
         stmt.execute("INSERT INTO tst SELECT x, x+1, x+2 FROM GENERATE_SERIES(1, 1000000) x;");
 
         stmt.execute("SET work_mem=\"1GB\";");
 
+        stmt.execute("SET yb_pg_mem_gc_threshold='10MB';");
         ResultSet thresholdRs = stmt.executeQuery("SHOW yb_pg_mem_gc_threshold;");
         assertTrue(thresholdRs.next());
         String threshold = thresholdRs.getString(1);
@@ -80,21 +89,19 @@ public class TestPgMemoryGC extends BasePgSQLTest {
    * A helper method to get the current RSS memory for a PID.
    */
   private long getRssForPid(final String pid) throws Exception {
-    final Path procFilePath = Paths.get(String.format(PROC_STATUS_FILE_PATH, pid));
-    assertTrue(Files.exists(procFilePath));
+    final String getRssCmd = "ps -p %s -o rss=";
+    final String cmd = String.format(getRssCmd, pid);
+    final StringBuilder stringBuilder = new StringBuilder();
 
-    try (Stream<String> stream = Files.lines(procFilePath)) {
-      final List<String> rss =
-          stream.filter(l -> l.contains(PROC_RSS_FIELD_NAME)).collect(Collectors.toList());
-      assertEquals(rss.size(), 1);
-      final String[] tokens = rss.get(0).split(" ");
-      for (final String tk : tokens) {
-        if (tk.trim().matches("\\d+")) {
-          return Long.valueOf(tk);
-        }
-      }
+    final Process process = Runtime.getRuntime().exec(cmd);
+    final BufferedReader bufferedReader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+    String line;
+    while ((line = bufferedReader.readLine()) != null) {
+      stringBuilder.append(line);
     }
+    final String rssStr = stringBuilder.toString();
 
-    throw new Exception("RSS stats not found.");
+    final long rss = Long.valueOf(rssStr);
+    return rss;
   }
 }
