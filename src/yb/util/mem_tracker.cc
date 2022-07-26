@@ -266,6 +266,28 @@ void MemTracker::SetTCMallocCacheMemory() {
 #endif
 }
 
+void MemTracker::GcTcmallocByChunks() {
+#ifdef TCMALLOC_ENABLED
+  // Number of bytes in the 'NORMAL' free list (i.e reserved by tcmalloc but
+  // not in use).
+  int64_t bytes_overhead = GetTCMallocProperty("tcmalloc.pageheap_free_bytes");
+  // Bytes allocated by the application.
+  int64_t bytes_used = GetTCMallocCurrentAllocatedBytes();
+
+  int64_t max_overhead = bytes_used * FLAGS_tcmalloc_max_free_bytes_percentage / 100.0;
+  if (bytes_overhead > max_overhead) {
+    int64_t extra = bytes_overhead - max_overhead;
+    while (extra > 0) {
+      // Release 1MB at a time, so that tcmalloc releases its page heap lock
+      // allowing other threads to make progress. This still disrupts the current
+      // thread, but is better than disrupting all.
+      MallocExtension::instance()->ReleaseToSystem(1024 * 1024);
+      extra -= 1024 * 1024;
+    }
+  }
+#endif
+}
+
 void MemTracker::CreateRootTracker() {
   DCHECK_ONLY_NOTNULL(dummy);
   int64_t limit = FLAGS_memory_limit_hard_bytes;
