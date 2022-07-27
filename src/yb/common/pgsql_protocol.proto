@@ -547,7 +547,8 @@ message PgsqlResponsePB {
 
   // A message holder for holding all DocDb related statistics.
   message docdb_stats {
-    optional uint64 scanned_rows = 16;
+    optional uint64 scanned_table_rows = 16 [ default = 0];
+    optional uint64 scanned_index_rows = 17 [ default = 0];
   }
 
   optional docdb_stats stats = 15;

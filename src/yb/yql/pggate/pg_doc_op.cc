@@ -238,6 +238,7 @@ Status PgDocOp::ExecuteInit(const PgExecParameters *exec_params) {
     exec_params_ = *exec_params;
   }
   total_scanned_docdb_rows = 0;
+  total_scanned_docdb_index_rows = 0;
   return Status::OK();
 }
 
@@ -405,7 +406,8 @@ Result<std::list<PgDocResult>> PgDocOp::ProcessCallResponse(const rpc::CallRespo
     rows_affected_count_ += op_response->rows_affected_count();
     if (op_response->has_stats()) {
       const auto& stats = op_response->stats();
-      total_scanned_docdb_rows += stats.has_scanned_rows() ? stats.scanned_rows() : 0;
+      total_scanned_docdb_rows += stats.has_scanned_table_rows() ? stats.scanned_table_rows() : 0;
+      total_scanned_docdb_index_rows += stats.has_scanned_index_rows() ? stats.scanned_index_rows() : 0;
     }
 
     // A single batch of requests almost always is directed to fetch data from a single tablet.

@@ -309,6 +309,10 @@ class PgDocOp : public std::enable_shared_from_this<PgDocOp> {
     return total_scanned_docdb_rows;
   }
 
+  uint64_t GetScannedDocIndexRows() const {
+    return total_scanned_docdb_index_rows;
+  }
+
  protected:
   uint64_t& GetInTxnLimit();
 
@@ -415,6 +419,7 @@ class PgDocOp : public std::enable_shared_from_this<PgDocOp> {
   // Rows scanned in DocDb. Accumulated across fetches. Reset for every new
   // Op if this Op is recycled.
   uint64 total_scanned_docdb_rows = 0;
+  uint64 total_scanned_docdb_index_rows = 0;
 
   // Whether all requested data by the statement has been received or there's a run-time error.
   bool end_of_data_ = false;
