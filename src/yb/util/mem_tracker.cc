@@ -780,8 +780,6 @@ void MemTracker::GcTcmalloc() {
   released_memory_since_gc = 0;
   TRACE_EVENT0("process", "MemTracker::GcTcmalloc");
   GcTcmallocByChunks();
-#else
-  // Nothing to do if not using tcmalloc.
 #endif
 }
 

@@ -297,6 +297,6 @@ extern void YbPgMemResetStmtConsumption();
  * if GC triggered, the free_bytes_since_gc will be reset.
  * Return true if GC on TCmalloc is triggered.
  */
-extern bool YbTryGc();
+extern void YbTryGc();
 
 #endif							/* MEMUTILS_H */

@@ -220,11 +220,8 @@ YBCStatus YBCGetPgggateCurrentAllocatedBytes(int64_t *consumption) {
   return YBCStatusOK();
 }
 
-YBCStatus YBCGcTcmalloc() {
-#ifdef TCMALLOC_ENABLED
-    MemTracker::GcTcmallocByChunks();
-#endif
-  return YBCStatusOK();
+void YBCGcTcmalloc() {
+  MemTracker::GcTcmallocByChunks();
 }
 
 //--------------------------------------------------------------------------------------------------
