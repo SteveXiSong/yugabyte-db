@@ -220,8 +220,20 @@ YBCStatus YBCGetPgggateCurrentAllocatedBytes(int64_t *consumption) {
   return YBCStatusOK();
 }
 
-void YBCGcTcmalloc() {
-  MemTracker::GcTcmallocByChunks();
+bool YBCTryMemConsume(int64_t bytes) {
+  if (pgapi) {
+    pgapi->GetMemTracker().Consume(bytes);
+    return true;
+  }
+  return false;
+}
+
+bool YBCTryMemRelease(int64_t bytes) {
+  if (pgapi) {
+    pgapi->GetMemTracker().Release(bytes);
+    return true;
+  }
+  return false;
 }
 
 //--------------------------------------------------------------------------------------------------

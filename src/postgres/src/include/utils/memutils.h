@@ -225,9 +225,11 @@ extern MemoryContext GenerationContextCreate(MemoryContext parent,
 #define SLAB_DEFAULT_BLOCK_SIZE		(8 * 1024)
 #define SLAB_LARGE_BLOCK_SIZE		(8 * 1024 * 1024)
 
+struct YbPgMemTracker;
+
 #define PG_MEM_TRACKER_INIT \
 	{ \
-		0, 0, 0, 0, 0 \
+		0, 0, 0, 0 \
 	}
 
 /*
@@ -257,11 +259,6 @@ typedef struct YbPgMemTracker
 	 * beginning of current statement
 	 */
 	Size stmt_max_mem_base_bytes;
-	/*
-	 * Tracks bytes freed since last Garbage Collection by TCmalloc.
-	 * When it is accumulated to a threshold, a GC will be triggered.
-	 */
-	Size freed_bytes_since_gc;
 } YbPgMemTracker;
 
 extern YbPgMemTracker PgMemTracker;
@@ -291,12 +288,5 @@ extern void YbPgMemSubConsumption(const Size sz);
  * track peak memory usage for a new statement.
  */
 extern void YbPgMemResetStmtConsumption();
-
-/*
- * Try to call a garbage collection after a free() call. Depending on the GC threshold configured,
- * if GC triggered, the free_bytes_since_gc will be reset.
- * Return true if GC on TCmalloc is triggered.
- */
-extern void YbTryGc();
 
 #endif							/* MEMUTILS_H */

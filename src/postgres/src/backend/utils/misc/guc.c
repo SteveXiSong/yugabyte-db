@@ -2396,20 +2396,6 @@ static struct config_int ConfigureNamesInt[] =
 		NULL, NULL, NULL
 	},
 
-	{
-		{"yb_pg_mem_gc_threshold", PGC_USERSET, RESOURCES_MEM,
-			gettext_noop("Set the garbage collection threshold for PG."),
-			gettext_noop("Yugabyte's PG layer uses TCmalloc when available."
-						 "The freed bytes can be cached in TCmalloc, which still occupies RSS."
-						 "When this threshold is reached, a release call will be called, and an"
-						 "attempt to release the freed bytes to the OS will be done."),
-			GUC_UNIT_KB
-		},
-		&yb_pg_mem_gc_threshold,
-		10 * 1024, 1024, MAX_KILOBYTES,
-		NULL, NULL, NULL
-	},
-
 	/*
 	 * We use the hopefully-safely-small value of 100kB as the compiled-in
 	 * default for max_stack_depth.  InitializeGUCOptions will increase it if

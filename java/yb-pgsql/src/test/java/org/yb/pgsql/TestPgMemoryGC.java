@@ -17,7 +17,6 @@ import org.yb.util.YBTestRunnerNonTsanOnly;
 @RunWith(value = YBTestRunnerNonTsanOnly.class)
 public class TestPgMemoryGC extends BasePgSQLTest {
 
-  private static final String DEFAULT_YB_PG_GC_THRESHOLD = "10MB";
   private static final long RSS_ACCEPTED_DIFF_AFTER_GC_BYTES = 10 * 1024;
   private static final String RSS_CMD = "ps -p %s -o rss=";
 
@@ -34,14 +33,6 @@ public class TestPgMemoryGC extends BasePgSQLTest {
     try (Statement stmt = connection.createStatement()) {
       stmt.execute("CREATE TABLE tst (c1 INT PRIMARY KEY, c2 INT, c3 INT);");
       stmt.execute("INSERT INTO tst SELECT x, x+1, x+2 FROM GENERATE_SERIES(1, 1000000) x;");
-
-      stmt.execute("SET work_mem=\"1GB\";");
-
-      stmt.execute("SET yb_pg_mem_gc_threshold='10MB';");
-      ResultSet thresholdRs = stmt.executeQuery("SHOW yb_pg_mem_gc_threshold;");
-      assertTrue(thresholdRs.next());
-      String threshold = thresholdRs.getString(1);
-      assertEquals(DEFAULT_YB_PG_GC_THRESHOLD, threshold);
 
       final String pg_pid = getPgPid(stmt);
       long rssBefore = getRssForPid(pg_pid);

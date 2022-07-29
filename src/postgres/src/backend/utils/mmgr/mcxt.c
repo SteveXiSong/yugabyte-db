@@ -28,6 +28,8 @@
 #include "yb/yql/pggate/ybc_pggate.h"
 #include "pg_yb_utils.h"
 
+static bool PgGateStarted = false;
+
 YbPgMemTracker PgMemTracker = PG_MEM_TRACKER_INIT;
 
 /*
@@ -67,6 +69,15 @@ void
 YbPgMemAddConsumption(const Size sz)
 {
 	PgMemTracker.pg_cur_mem_bytes += sz;
+	/*
+	 * Try to tracker PG's memory consumption by the root MemTracker.
+	 * Consume the current PG's memory consumption instead the sz bytes since
+	 * the root MemTracker is initiated, to compensate the missed memory
+	 * consumption since the process starts.
+	 */
+	PgGateStarted =
+		YBCTryMemConsume(PgGateStarted ? sz : PgMemTracker.pg_cur_mem_bytes);
+
 	/* Only update max memory when memory is increasing */
 	YbPgMemUpdateMax();
 }
@@ -75,15 +86,8 @@ void
 YbPgMemSubConsumption(const Size sz)
 {
 	// Avoid overflow when subtracting sz.
-	if (PgMemTracker.pg_cur_mem_bytes >= sz)
-	{
-		PgMemTracker.pg_cur_mem_bytes -= sz;
-	}
-	else
-	{
-		PgMemTracker.pg_cur_mem_bytes = 0;
-	}
-	PgMemTracker.freed_bytes_since_gc += sz;
+	PgMemTracker.pg_cur_mem_bytes = Max(PgMemTracker.pg_cur_mem_bytes - sz, 0);
+	YBCTryMemRelease(sz);
 }
 
 void
@@ -91,16 +95,6 @@ YbPgMemResetStmtConsumption()
 {
 	PgMemTracker.stmt_max_mem_base_bytes = SnapshotMemory();
 	PgMemTracker.stmt_max_mem_bytes = 0;
-}
-
-void
-YbTryGc()
-{
-	if (PgMemTracker.freed_bytes_since_gc > (yb_pg_mem_gc_threshold * 1024))
-	{
-		YBCGcTcmalloc();
-		PgMemTracker.freed_bytes_since_gc = 0;
-	}
 }
 
 /*****************************************************************************
