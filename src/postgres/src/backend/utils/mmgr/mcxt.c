@@ -28,7 +28,6 @@
 #include "yb/yql/pggate/ybc_pggate.h"
 #include "pg_yb_utils.h"
 
-static bool PgGateStarted = false;
 
 YbPgMemTracker PgMemTracker = PG_MEM_TRACKER_INIT;
 
@@ -70,13 +69,13 @@ YbPgMemAddConsumption(const Size sz)
 {
 	PgMemTracker.pg_cur_mem_bytes += sz;
 	/*
-	 * Try to tracker PG's memory consumption by the root MemTracker.
+	 * Try to track PG's memory consumption by the root MemTracker.
 	 * Consume the current PG's memory consumption instead the sz bytes since
 	 * the root MemTracker is initiated, to compensate the missed memory
 	 * consumption since the process starts.
 	 */
-	PgGateStarted =
-		YBCTryMemConsume(PgGateStarted ? sz : PgMemTracker.pg_cur_mem_bytes);
+	PgMemTracker.pggate_started = YBCTryMemConsume(
+		PgMemTracker.pggate_started ? sz : PgMemTracker.pg_cur_mem_bytes);
 
 	/* Only update max memory when memory is increasing */
 	YbPgMemUpdateMax();

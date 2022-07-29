@@ -229,7 +229,7 @@ struct YbPgMemTracker;
 
 #define PG_MEM_TRACKER_INIT \
 	{ \
-		0, 0, 0, 0 \
+		0, 0, 0, 0, false \
 	}
 
 /*
@@ -259,6 +259,12 @@ typedef struct YbPgMemTracker
 	 * beginning of current statement
 	 */
 	Size stmt_max_mem_base_bytes;
+
+	/*
+	 * A flag to tell if pggate is inititated. This is used to track the memory
+	 * used by PG before pggate is started.
+	 */
+	bool pggate_started;
 } YbPgMemTracker;
 
 extern YbPgMemTracker PgMemTracker;
