@@ -28,8 +28,7 @@
 #include "yb/yql/pggate/ybc_pggate.h"
 #include "pg_yb_utils.h"
 
-
-YbPgMemTracker PgMemTracker = PG_MEM_TRACKER_INIT;
+YbPgMemTracker PgMemTracker = {0};
 
 /*
  * A helper function to take snapshot of current memory usage.
@@ -65,7 +64,7 @@ YbPgMemUpdateMax()
 }
 
 void
-YbPgMemAddConsumption(const Size sz)
+YbPgMemAddConsumption(Size sz)
 {
 	PgMemTracker.pg_cur_mem_bytes += sz;
 	/*
@@ -74,19 +73,22 @@ YbPgMemAddConsumption(const Size sz)
 	 * the root MemTracker is initiated, to compensate the missed memory
 	 * consumption since the process starts.
 	 */
-	PgMemTracker.pggate_started = YBCTryMemConsume(
-		PgMemTracker.pggate_started ? sz : PgMemTracker.pg_cur_mem_bytes);
+	PgMemTracker.pggate_alive = YBCTryMemConsume(
+		PgMemTracker.pggate_alive ? sz : PgMemTracker.pg_cur_mem_bytes);
 
 	/* Only update max memory when memory is increasing */
 	YbPgMemUpdateMax();
 }
 
 void
-YbPgMemSubConsumption(const Size sz)
+YbPgMemSubConsumption(Size sz)
 {
 	// Avoid overflow when subtracting sz.
 	PgMemTracker.pg_cur_mem_bytes = Max(PgMemTracker.pg_cur_mem_bytes - sz, 0);
-	YBCTryMemRelease(sz);
+	// Only call release if pggate is alive, and update its liveness from the
+	// return value.
+	if (PgMemTracker.pggate_alive)
+		PgMemTracker.pggate_alive = YBCTryMemRelease(sz);
 }
 
 void

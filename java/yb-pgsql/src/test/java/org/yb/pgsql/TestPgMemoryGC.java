@@ -1,40 +1,32 @@
 package org.yb.pgsql;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
-import java.sql.ResultSet;
 import java.sql.Statement;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.yb.util.CoreFileUtil;
-import org.yb.util.YBTestRunnerNonTsanOnly;
+import org.yb.util.YBTestRunnerNonTsanOrMac;
 
-@RunWith(value = YBTestRunnerNonTsanOnly.class)
+@RunWith(value = YBTestRunnerNonTsanOrMac.class)
 public class TestPgMemoryGC extends BasePgSQLTest {
 
   private static final long RSS_ACCEPTED_DIFF_AFTER_GC_BYTES = 10 * 1024;
-  private static final String RSS_CMD = "ps -p %s -o rss=";
+  private static final String RSS_CMD = "ps -p %d -o rss=";
 
   /*
    * Verify that the freed memory allocated by a query is released to OS.
+   * This is specically for Linux platforms. MAC doesn't use TCmalloc.
    */
   @Test
   public void testMetrics() throws Exception {
-    // This is specically for Linux platforms. MAC doesn't use TCmalloc.
-    if (CoreFileUtil.IS_MAC) {
-      return;
-    }
-
     try (Statement stmt = connection.createStatement()) {
       stmt.execute("CREATE TABLE tst (c1 INT PRIMARY KEY, c2 INT, c3 INT);");
       stmt.execute("INSERT INTO tst SELECT x, x+1, x+2 FROM GENERATE_SERIES(1, 1000000) x;");
 
-      final String pg_pid = getPgPid(stmt);
+      final int pg_pid = getPgPid(stmt);
       long rssBefore = getRssForPid(pg_pid);
       // For quick sorting 1M rows, it takes around 78MB memory.
       // This will trigger the PG's memory GC. Our GC threshold is 10MB by default.
@@ -58,21 +50,14 @@ public class TestPgMemoryGC extends BasePgSQLTest {
   /*
    * A helper method to get current connection's PID.
    */
-  private String getPgPid(final Statement stmt) throws Exception {
-    final ResultSet pidRs = stmt.executeQuery("SELECT pg_backend_pid();");
-    String pid = null;
-    while (pidRs.next()) {
-      pid = pidRs.getString(1);
-      break;
-    }
-    assertNotNull(pid);
-    return pid;
+  private int getPgPid(Statement stmt) throws Exception {
+    return getSingleRow(stmt, "SELECT pg_backend_pid();").getInt(0);
   }
 
   /*
    * A helper method to get the current RSS memory for a PID.
    */
-  private long getRssForPid(final String pid) throws Exception {
+  private static long getRssForPid(int pid) throws Exception {
     final String cmd = String.format(RSS_CMD, pid);
     final StringBuilder stringBuilder = new StringBuilder();
 
