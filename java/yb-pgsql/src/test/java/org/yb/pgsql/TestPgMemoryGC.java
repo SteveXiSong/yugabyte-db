@@ -8,9 +8,9 @@ import java.sql.Statement;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.yb.util.YBTestRunnerNonTsanOrMac;
+import org.yb.util.YBTestRunnerNonTsanOnly;
 
-@RunWith(value = YBTestRunnerNonTsanOrMac.class)
+@RunWith(value = YBTestRunnerNonTsanOnly.class)
 public class TestPgMemoryGC extends BasePgSQLTest {
 
   private static final long RSS_ACCEPTED_DIFF_AFTER_GC_BYTES = 10 * 1024;
