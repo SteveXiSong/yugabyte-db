@@ -50,7 +50,7 @@ public class TestPgMemoryGC extends BasePgSQLTest {
   /*
    * A helper method to get current connection's PID.
    */
-  private int getPgPid(Statement stmt) throws Exception {
+  private static int getPgPid(Statement stmt) throws Exception {
     return getSingleRow(stmt, "SELECT pg_backend_pid();").getInt(0);
   }
 
