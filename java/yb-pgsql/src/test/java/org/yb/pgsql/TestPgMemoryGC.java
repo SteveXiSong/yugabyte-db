@@ -6,6 +6,7 @@ import java.sql.Statement;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.yb.client.TestUtils;
 import org.yb.util.YBTestRunnerNonTsanOnly;
 
 import static org.yb.AssertionWrappers.assertTrue;
@@ -36,14 +37,17 @@ public class TestPgMemoryGC extends BasePgSQLTest {
       assertTrue("Freed bytes should be freed when GC threshold is reached",
           (rssAfter - rssBefore) < RSS_ACCEPTED_DIFF_AFTER_GC_BYTES);
 
-      // Make sure no memory leak, freed memory recycled even after multiple queries.
-      for (int i = 0; i < 10; ++i) {
-        stmt.executeQuery("SELECT * FROM tst ORDER BY c2;");
-      }
+      // Debug build is very slow and will time out. 
+      if (TestUtils.isReleaseBuild()) {
+        // Make sure no memory leak, freed memory recycled even after multiple queries.
+        for (int i = 0; i < 10; ++i) {
+          stmt.executeQuery("SELECT * FROM tst ORDER BY c2;");
+        }
 
-      rssAfter = getRssForPid(pg_pid);
-      assertTrue("Freed bytes should be freed when GC threshold is reached",
-          (rssAfter - rssBefore) < RSS_ACCEPTED_DIFF_AFTER_GC_BYTES);
+        rssAfter = getRssForPid(pg_pid);
+        assertTrue("Freed bytes should be freed when GC threshold is reached",
+            (rssAfter - rssBefore) < RSS_ACCEPTED_DIFF_AFTER_GC_BYTES);
+      }
     }
   }
 
