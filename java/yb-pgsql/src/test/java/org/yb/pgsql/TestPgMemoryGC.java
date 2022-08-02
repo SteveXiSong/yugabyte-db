@@ -1,7 +1,5 @@
 package org.yb.pgsql;
 
-import static org.junit.Assert.assertTrue;
-
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.sql.Statement;
@@ -9,6 +7,8 @@ import java.sql.Statement;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.yb.util.YBTestRunnerNonTsanOnly;
+
+import static org.yb.AssertionWrappers.assertTrue;
 
 @RunWith(value = YBTestRunnerNonTsanOnly.class)
 public class TestPgMemoryGC extends BasePgSQLTest {
