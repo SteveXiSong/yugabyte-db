@@ -24,20 +24,20 @@ public class TestPgMemoryGC extends BasePgSQLTest {
   @Test
   public void testMetrics() throws Exception {
     try (Statement stmt = connection.createStatement()) {
+      stmt.execute("SET work_mem='1GB';");
       stmt.execute("CREATE TABLE tst (c1 INT PRIMARY KEY, c2 INT, c3 INT);");
       stmt.execute("INSERT INTO tst SELECT x, x+1, x+2 FROM GENERATE_SERIES(1, 1000000) x;");
 
       final int pg_pid = getPgPid(stmt);
       long rssBefore = getRssForPid(pg_pid);
       // For quick sorting 1M rows, it takes around 78MB memory.
-      // This will trigger the PG's memory GC. Our GC threshold is 10MB by default.
       stmt.executeQuery("SELECT * FROM tst ORDER BY c2;");
       long rssAfter = getRssForPid(pg_pid);
 
       assertTrue("Freed bytes should be freed when GC threshold is reached",
           (rssAfter - rssBefore) < RSS_ACCEPTED_DIFF_AFTER_GC_BYTES);
 
-      // Debug build is very slow and will time out. 
+      // Debug build is very slow and will time out.
       if (TestUtils.isReleaseBuild()) {
         // Make sure no memory leak, freed memory recycled even after multiple queries.
         for (int i = 0; i < 10; ++i) {
