@@ -378,9 +378,6 @@ MemTracker::MemTracker(int64_t byte_limit, const string& id,
 
 MemTracker::~MemTracker() {
   VLOG(1) << "Destroying tracker " << ToString();
-  if (!consumption_functor_) {
-    DCHECK_EQ(consumption(), 0) << "Memory tracker " << ToString();
-  }
   if (parent_) {
     if (add_to_parent_) {
       parent_->Release(consumption());
