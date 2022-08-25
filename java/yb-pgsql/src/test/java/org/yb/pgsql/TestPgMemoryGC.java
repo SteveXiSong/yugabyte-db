@@ -9,14 +9,14 @@ import org.junit.runner.RunWith;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.yb.client.TestUtils;
-import org.yb.util.YBTestRunnerNonTsanOnly;
+import org.yb.util.YBTestRunnerNonTsanAsan;
 
 import static org.yb.AssertionWrappers.assertTrue;
 
 /*
  * Verify that the freed memory allocated by a query is released to OS.
  */
-@RunWith(value = YBTestRunnerNonTsanOnly.class)
+@RunWith(value = YBTestRunnerNonTsanAsan.class)
 public class TestPgMemoryGC extends BasePgSQLTest {
   private static final Logger LOG = LoggerFactory.getLogger(TestPgMemoryGC.class);
 
@@ -26,6 +26,7 @@ public class TestPgMemoryGC extends BasePgSQLTest {
   private static final long LOW_PG_GC_THRESHOLD_BYTES = 5 * 1024 * 1024; // 5MB
   private static final Map<String, String> EMPTY_ADD_MASTER_FLAGS = Collections.emptyMap();
   private static final String PG_GC_OVERRIDE_FLAG = "pg_mem_tracker_tcmalloc_gc_release_bytes";
+  private static final String ARCH_AARCH64 = "aarch64";
 
   @Override
   protected int getReplicationFactor() {
@@ -44,6 +45,11 @@ public class TestPgMemoryGC extends BasePgSQLTest {
 
   @Test
   public void testPgMemoryGcOrderBy() throws Exception {
+    final String arch = System.getProperty("os.arch");
+    LOG.info("### arch is {}", arch);
+    if (arch.equals(ARCH_AARCH64)) {
+      return;
+    }
     // Prepare for the queries
     setupTestTable();
 
@@ -72,9 +78,11 @@ public class TestPgMemoryGC extends BasePgSQLTest {
 
   @Test
   public void testPgMemoryGcThresholdOverride() throws Exception {
-
     final String arch = System.getProperty("os.arch");
     LOG.info("### arch is {}", arch);
+    if (arch.equals(ARCH_AARCH64)) {
+      return;
+    }
 
     // Skip verifying for override threshold for non Linux distribution as Mac doesn't use TCmalloc
     if (!TestUtils.IS_LINUX) {
@@ -123,7 +131,7 @@ public class TestPgMemoryGC extends BasePgSQLTest {
       runSimpleOrderBy(stmt);
       final long rssAfter = getRssForPid(pgPid);
       final long rssDiff = rssAfter - rssBefore;
-      LOG.info("PG connection {} RSS before: {} bytes, after: {} bytes, diff: {} bytes.", pgPid,
+      LOG.info("PG connection {} RSS before: {} kilobytes, after: {} kilobytes, diff: {} kilobytes.", pgPid,
           rssBefore, rssAfter, rssDiff);
       return rssDiff;
     }
