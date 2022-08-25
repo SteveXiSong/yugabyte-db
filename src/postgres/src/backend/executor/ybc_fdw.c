@@ -702,10 +702,10 @@ ybcExplainForeignScan(ForeignScanState *node, ExplainState *es)
 
 		uint64_t irows = stats.docdb_index_scanned_row_count;
 		if (irows != 0)
-			ExplainPropertyInteger("DocDb Scanned Index Rows", NULL, irows, es);
+			ExplainPropertyInteger("DocDB Scanned Index Rows", NULL, irows, es);
 
 		uint64_t rows = stats.docdb_table_scanned_row_count;
-		ExplainPropertyInteger("DocDb Scanned Table Rows", NULL, rows, es);
+		ExplainPropertyInteger("DocDB Scanned Table Rows", NULL, rows, es);
 		es->yb_docdb_total_scanned_rows += rows;
 	}
 }

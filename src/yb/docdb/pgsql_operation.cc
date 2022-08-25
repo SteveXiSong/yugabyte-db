@@ -1293,8 +1293,7 @@ Result<size_t> PgsqlReadOperation::ExecuteScalar(const YQLStorageIf& ql_storage,
   RETURN_NOT_OK(SetPagingStateIfNecessary(
       iter, fetched_rows, row_count_limit, scan_time_exceeded,
       request_.has_index_request() ? *index_schema : doc_schema, read_time, has_paging_state));
-      iter, fetched_rows, row_count_limit, scan_time_exceeded, *scan_schema,
-      read_time, has_paging_state));
+
   response_.mutable_stats()->set_scanned_table_rows(scanned_table_count);
   response_.mutable_stats()->set_scanned_index_rows(scanned_index_count);
   return fetched_rows;

@@ -4050,7 +4050,7 @@ ExplainSeqScanRows(SeqScanState *node, ExplainState *es)
 
 	uint   irows = stats.docdb_table_scanned_row_count;
 	double rows = irows / nl;
-	ExplainPropertyFloat("DocDb Scanned Table Rows", NULL, rows,
+	ExplainPropertyFloat("DocDB Scanned Table Rows", NULL, rows,
 						 rows < 1 ? 2 : 0, es);
 
 	es->yb_docdb_total_scanned_rows += irows;
@@ -4069,7 +4069,7 @@ ExplainIndexOnlyScanRows(IndexOnlyScanState *node, ExplainState* es)
 	YBCPgRetrieveSelectStats(handle, &stats);
 
 	double rows = stats.docdb_table_scanned_row_count / nl;
-	ExplainPropertyFloat("DocDb Scanned Index Rows", NULL, rows,
+	ExplainPropertyFloat("DocDB Scanned Index Rows", NULL, rows,
 						 rows < 1 ? 2 : 0, es);
 	es->yb_docdb_total_scanned_rows += stats.docdb_table_scanned_row_count;
 }
@@ -4088,7 +4088,7 @@ ExplainIndexScanRows(IndexScanState *node, ExplainState *es)
 
 	// Show scanned rows for the secondary index table
 	double irows = stats.docdb_index_scanned_row_count / nl;
-	ExplainPropertyFloat("DocDb Scanned Index Rows", NULL, irows,
+	ExplainPropertyFloat("DocDB Scanned Index Rows", NULL, irows,
 						 irows < 1 ? 2 : 0, es);
 	es->yb_docdb_total_scanned_rows += stats.docdb_index_scanned_row_count;
 
@@ -4097,7 +4097,7 @@ ExplainIndexScanRows(IndexScanState *node, ExplainState *es)
 					   stats.docdb_table_scanned_row_count :
 						 ybscan->relation->actual_table_scanned_rows);
 	double mrows = rows / nl;
-	ExplainPropertyFloat("DocDb Scanned Table Rows", NULL, mrows,
+	ExplainPropertyFloat("DocDB Scanned Table Rows", NULL, mrows,
 						 mrows < 1 ? 2 : 0, es);
 	es->yb_docdb_total_scanned_rows += rows;
 }
