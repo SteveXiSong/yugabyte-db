@@ -31,6 +31,7 @@
 #include "access/reloptions.h"
 #include "catalog/pg_database.h"
 #include "common/pg_yb_common.h"
+#include "executor/instrument.h"
 #include "nodes/parsenodes.h"
 #include "nodes/plannodes.h"
 #include "utils/relcache.h"
@@ -513,6 +514,8 @@ extern void YBBeginOperationsBuffering();
 extern void YBEndOperationsBuffering();
 extern void YBResetOperationsBuffering();
 extern void YBFlushBufferedOperations();
+extern void YBGetAndResetOperationFlushRpcStats(uint64_t *count,
+												uint64_t *wait_time);
 
 bool YBReadFromFollowersEnabled();
 int32_t YBFollowerReadStalenessMs();
@@ -656,5 +659,11 @@ bool YBCIsRegionLocal(Relation rel);
  * after tablet splitting.
  */
 extern Datum yb_get_range_split_clause(PG_FUNCTION_ARGS);
+
+/*
+ * Update read RPC statistics for EXPLAIN ANALYZE.
+ */
+void YbUpdateReadRpcStats(YBCPgStatement handle,
+						  YbPgRpcStats *reads, YbPgRpcStats *tbl_reads);
 
 #endif /* PG_YB_UTILS_H */

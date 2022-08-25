@@ -230,6 +230,13 @@ class PgOperationBuffer::Impl {
     in_flight_ops_.clear();
   }
 
+  void GetAndResetRpcStats(uint64_t* count, uint64_t* wait_time) {
+    *count = rpc_count_;
+    rpc_count_ = 0;
+    *wait_time = rpc_wait_time_.ToNanoseconds();
+    rpc_wait_time_ = MonoDelta::FromNanoseconds(0);
+  }
+
  private:
   template<class Res>
   Res ClearOnError(Res res) {
@@ -302,7 +309,8 @@ class PgOperationBuffer::Impl {
 
   Status EnsureCompleted(const InFlightOps::iterator& end) {
     for (auto i = in_flight_ops_.begin(); i != end; ++i) {
-      RETURN_NOT_OK(i->future.Get());
+      RETURN_NOT_OK(i->future.Get(&rpc_wait_time_));
+      ++rpc_count_;
     }
     in_flight_ops_.erase(in_flight_ops_.begin(), end);
     return Status::OK();
@@ -390,6 +398,8 @@ class PgOperationBuffer::Impl {
   BufferableOperations txn_ops_;
   RowKeys keys_;
   InFlightOps in_flight_ops_;
+  uint64_t rpc_count_ = 0;
+  MonoDelta rpc_wait_time_ = MonoDelta::FromNanoseconds(0);
 };
 
 PgOperationBuffer::PgOperationBuffer(const Flusher& flusher,
@@ -418,6 +428,11 @@ size_t PgOperationBuffer::Size() const {
 
 void PgOperationBuffer::Clear() {
     impl_->Clear();
+}
+
+void PgOperationBuffer::GetAndResetRpcStats(uint64_t* count,
+                                            uint64_t* wait_time) {
+  impl_->GetAndResetRpcStats(count, wait_time);
 }
 
 } // namespace pggate
