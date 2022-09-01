@@ -646,7 +646,7 @@ ExplainOnePlan(PlannedStmt *plannedstmt, IntoClause *into, ExplainState *es,
 
 		if (IsYugaByteEnabled())
 		{
-			if (es->docdb && es->yb_docdb_total_scanned_rows > 0)
+			if (es->docdb)
 			{
 				ExplainPropertyInteger("DocDB Scanned Rows", NULL,
 									   es->yb_docdb_total_scanned_rows, es);
@@ -4043,6 +4043,8 @@ ExplainSeqScanRows(SeqScanState *node, ExplainState *es)
 	YbScanDesc	   ybscan = ss.ss_currentScanDesc->ybscan;
 	YBCPgStatement handle = ybscan->handle;
 	double		   nl = ((PlanState *) node)->instrument->nloops;
+	if (nl == 0)
+		return;
 
 	YBCSelectStats stats;
 	memset(&stats, 0, sizeof(YBCSelectStats));
@@ -4063,6 +4065,9 @@ ExplainIndexOnlyScanRows(IndexOnlyScanState *node, ExplainState* es)
 	YbScanDesc	   ybscan = (YbScanDesc) ioss_desc->opaque;
 	YBCPgStatement handle = ybscan->handle;
 	double		   nl = ((PlanState *) node)->instrument->nloops;
+	
+	if (nl == 0) 
+		return;
 
 	YBCSelectStats stats;
 	memset(&stats, 0, sizeof(YBCSelectStats));
@@ -4081,6 +4086,9 @@ ExplainIndexScanRows(IndexScanState *node, ExplainState *es)
 	YbScanDesc	   ybscan = (YbScanDesc) iss_desc->opaque;
 	YBCPgStatement handle = ybscan->handle;
 	double		   nl = ((PlanState *) node)->instrument->nloops;
+
+	if (nl == 0) 
+		return;
 
 	YBCSelectStats stats;
 	memset(&stats, 0, sizeof(YBCSelectStats));

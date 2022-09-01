@@ -391,12 +391,8 @@ public class TestPgExplainAnalyze extends BasePgSQLTest {
           + "SELECT * FROM %s AS t1 JOIN %s AS t2 ON t1.c2 <= t2.c3 AND t1.c1 = 1",
           kPkIndexName, kIndexName, kTableName, kTableName),
                    ImmutableList.of(
-                       new ExpectedNodeFields(
-                           "Index Scan", kTableName, "t1", kPkIndexName,
-                           kExpIndexScanNodeFieldsT1),
-                       new ExpectedNodeFields(
-                           "Index Scan", kTableName, "t2", kIndexName,
-                           kExpIndexScanNodeFieldsT2)),
+                       new ExpectedNodeFields("Index Scan", kTableName, "t1", kPkIndexName, kExpIndexScanNodeFieldsT1),
+                       new ExpectedNodeFields("Index Scan", kTableName, "t2", kIndexName, kExpIndexScanNodeFieldsT2)),
                    ImmutableMap.of(
                        kTotalReadRpcWaitTime, kGreaterThanZero,
                        kTotalWriteRpcCount, kShouldNotExist,
@@ -411,15 +407,15 @@ public class TestPgExplainAnalyze extends BasePgSQLTest {
           .put(kTableReadRpcCount, kShouldNotExist)
           .put(kTableReadRpcWaitTime, kShouldNotExist)
           .put(kDocDBScannedIndexRows, 0.0)
-          .put(kDocDBScannedTableRows, 5.0).build();
+          .put(kDocDBScannedTableRows, 0.0).build();
 
       final ImmutableMap<String, Double> kExpIndexScanNodeFieldsT2 = ImmutableMap.<String, Double>builder()
           .put(kReadRpcCount, kShouldNotExist)
           .put(kReadRpcWaitTime, kShouldNotExist)
           .put(kTableReadRpcCount, kShouldNotExist)
           .put(kTableReadRpcWaitTime, kShouldNotExist)
-          .put(kDocDBScannedIndexRows, 0.0)
-          .put(kDocDBScannedTableRows, 0.0).build();
+          .put(kDocDBScannedIndexRows, kShouldNotExist)
+          .put(kDocDBScannedTableRows, kShouldNotExist).build();
 
       testExplainOneQuery(stmt, String.format(
           "/*+ IndexScan(t1 %s) IndexScan(t2 %s) Leading((t1 t2)) NestLoop(t1 t2) */"
@@ -434,7 +430,7 @@ public class TestPgExplainAnalyze extends BasePgSQLTest {
                        kTotalReadRpcWaitTime, kGreaterThanZero,
                        kTotalWriteRpcCount, kShouldNotExist,
                        kTotalWriteRpcWaitTime, kShouldNotExist,
-                       kDocDBScannedRows, 5.0));
+                       kDocDBScannedRows, 0.0));
       }
 
       // Modification statements
