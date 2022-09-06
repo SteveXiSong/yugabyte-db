@@ -72,6 +72,10 @@ public class TestPgMemoryGC extends BasePgSQLTest {
 
   @Test
   public void testPgMemoryGcThresholdOverride() throws Exception {
+
+    final String arch = System.getProperty("os.arch");
+    LOG.info("### arch is {}", arch);
+
     // Skip verifying for override threshold for non Linux distribution as Mac doesn't use TCmalloc
     if (!TestUtils.IS_LINUX) {
       return;
