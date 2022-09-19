@@ -28,6 +28,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -49,6 +50,9 @@ public class TestPgExplainAnalyze extends BasePgSQLTest {
   private static final String kPkIndexName = String.format("%s_pkey", kTableName);
   private static final String kIndexName = String.format("i_%s_c3_c2", kTableName);
   private static final int kTableRows = 5000;
+
+  // To avoid stopping at each diff and get all the diffs after adding or modifying the tests.
+  private static final boolean kStopAtFailures = true;
 
   @Override
   protected int getReplicationFactor() {
@@ -214,14 +218,14 @@ public class TestPgExplainAnalyze extends BasePgSQLTest {
             String.format(kFmtExpectedGt, query, entry.getKey(), elem.getAsDouble(), 0.0),
             elem.getAsDouble(), 0.0);
       } else {
-        assertEquals(query + ": " + entry.toString(), entry.getValue(), elem.getAsDouble());
-        // *** To avoid stopping at each diff and get all the diffs after adding or modifying the
-        // tests, comment out the assertEquals above and uncomment the lines below.
-        // if (entry.getValue() != elem.getAsDouble()) {
-        //   LOG.info(String.format("%s: [%s] Expected %s but %s",
-        //                          query, entry.toString(),
-        //                          entry.getValue(), elem.getAsDouble()));
-        // }
+          if (kStopAtFailures) {
+              assertEquals(query + ": " + entry.toString(), entry.getValue(), elem.getAsDouble());
+          } else {
+              if (entry.getValue() != elem.getAsDouble()) {
+                  LOG.info(String.format("%s: [%s] Expected %s but %s", query, entry.toString(),
+                          entry.getValue(), elem.getAsDouble()));
+              }
+          }
       }
     }
   }
@@ -437,24 +441,47 @@ public class TestPgExplainAnalyze extends BasePgSQLTest {
 
       // INSERT value list
       // reduce the batch size to avoid 0 wait time
+      {
+      final ImmutableMap<String, Double> kExpNodeFields = ImmutableMap.<String, Double>builder()
+          .put(kReadRpcCount, kShouldNotExist)
+          .put(kReadRpcWaitTime, kShouldNotExist)
+          .put(kTableReadRpcCount, kShouldNotExist)
+          .put(kTableReadRpcWaitTime, kShouldNotExist)
+          .put(kDocDBScannedIndexRows, kShouldNotExist)
+          .put(kDocDBScannedTableRows, kShouldNotExist).build();
+
+      final ImmutableMap<String, Double> kExpSummaryFields = ImmutableMap.<String, Double>builder()
+          .put(kTotalReadRpcWaitTime, kShouldNotExist)
+          .put(kTotalWriteRpcCount, 2.0)
+          .put(kTotalWriteRpcWaitTime, kGreaterThanZero)
+          .put(kDocDBScannedRows, 0.0).build();
+
       stmt.execute("SET ysql_session_max_batch_size = 4");
       testExplainOneQuery(stmt, String.format(
           "INSERT INTO %s VALUES (1001, 0, 0, 'xyz'), (1002, 0, 0, 'wxy'), (1003, 0, 0, 'vwx'), "
           + "(1004, 0, 0, 'vwx')", kTableName),
-                   ImmutableList.of(
-                       new ExpectedNodeFields(
-                           "Values Scan", "", "*VALUES*", "",
-                           ImmutableMap.of(
-                               kReadRpcCount, kShouldNotExist,
-                               kReadRpcWaitTime, kShouldNotExist,
-                               kTableReadRpcCount, kShouldNotExist,
-                               kTableReadRpcWaitTime, kShouldNotExist))),
-                   ImmutableMap.of(
-                       kTotalReadRpcWaitTime, kShouldNotExist,
-                       kTotalWriteRpcCount, 2.0,
-                       kTotalWriteRpcWaitTime, kGreaterThanZero));
+                    ImmutableList.of(new ExpectedNodeFields(
+                      "Values Scan", "", "*VALUES*", "",
+                      kExpNodeFields)),
+                    kExpSummaryFields);
+      }
 
       // no buffering
+      {
+      final ImmutableMap<String, Double> kExpNodeFields = ImmutableMap.<String, Double>builder()
+          .put(kReadRpcCount, kShouldNotExist)
+          .put(kReadRpcWaitTime, kShouldNotExist)
+          .put(kTableReadRpcCount, kShouldNotExist)
+          .put(kTableReadRpcWaitTime, kShouldNotExist)
+          .put(kDocDBScannedIndexRows, kShouldNotExist)
+          .put(kDocDBScannedTableRows, kShouldNotExist).build();
+
+      final ImmutableMap<String, Double> kExpSummaryFields = ImmutableMap.<String, Double>builder()
+          .put(kTotalReadRpcWaitTime, kShouldNotExist)
+          .put(kTotalWriteRpcCount, 8.0)
+          .put(kTotalWriteRpcWaitTime, kGreaterThanZero)
+          .put(kDocDBScannedRows, 0.0).build();
+
       stmt.execute("SET ysql_session_max_batch_size = 1");
       testExplainOneQuery(stmt, String.format(
           "INSERT INTO %s VALUES (1601, 0, 0, 'xyz'), (1602, 0, 0, 'wxy'), (1603, 0, 0, 'vwx'), "
@@ -462,34 +489,51 @@ public class TestPgExplainAnalyze extends BasePgSQLTest {
                    ImmutableList.of(
                        new ExpectedNodeFields(
                            "Values Scan", "", "*VALUES*", "",
-                           ImmutableMap.of(
-                               kReadRpcCount, kShouldNotExist,
-                               kReadRpcWaitTime, kShouldNotExist,
-                               kTableReadRpcCount, kShouldNotExist,
-                               kTableReadRpcWaitTime, kShouldNotExist))),
-                   ImmutableMap.of(
-                       kTotalReadRpcWaitTime, kShouldNotExist,
-                       kTotalWriteRpcCount, 8.0,
-                       kTotalWriteRpcWaitTime, kGreaterThanZero));
+                           kExpNodeFields)),
+                    kExpSummaryFields);
       stmt.execute("RESET ysql_session_max_batch_size");
+      }
 
+      {
       // INSERT ... SELECT FORM non-YB table
+      final ImmutableMap<String, Double> kExpNodeFields = ImmutableMap.<String, Double>builder()
+          .put(kReadRpcCount, kShouldNotExist)
+          .put(kReadRpcWaitTime, kShouldNotExist)
+          .put(kTableReadRpcCount, kShouldNotExist)
+          .put(kTableReadRpcWaitTime, kShouldNotExist)
+          .put(kDocDBScannedIndexRows, kShouldNotExist)
+          .put(kDocDBScannedTableRows, kShouldNotExist).build();
+
+      final ImmutableMap<String, Double> kExpSummaryFields = ImmutableMap.<String, Double>builder()
+          .put(kTotalReadRpcWaitTime, kShouldNotExist)
+          .put(kTotalWriteRpcCount, 10.0)
+          .put(kTotalWriteRpcWaitTime, kGreaterThanZero)
+          .put(kDocDBScannedRows, 0.0).build();
+
       testExplainOneQuery(stmt, String.format(
           "INSERT INTO %s SELECT %d + i %% 1000, i %% 11, i %% 20, rpad(i::text, 256, '#') "
           + "FROM generate_series(%d, %d) i",
           kTableName, kTableRows, kTableRows+1, kTableRows + kTableRows/2),
                    ImmutableList.of(
                        new ExpectedNodeFields(
-                           "Function Scan", "", "i", "",
-                           ImmutableMap.of(
-                               kReadRpcCount, kShouldNotExist,
-                               kReadRpcWaitTime, kShouldNotExist,
-                               kTableReadRpcCount, kShouldNotExist,
-                               kTableReadRpcWaitTime, kShouldNotExist))),
-                   ImmutableMap.of(
-                       kTotalReadRpcWaitTime, kShouldNotExist,
-                       kTotalWriteRpcCount, 10.0,
-                       kTotalWriteRpcWaitTime, kGreaterThanZero));
+                           "Function Scan", "", "i", "", kExpNodeFields)),
+                    kExpSummaryFields);
+      }
+
+      {
+      final ImmutableMap<String, Double> kExpNodeFields = ImmutableMap.<String, Double>builder()
+          .put(kReadRpcCount, 1.0)
+          .put(kReadRpcWaitTime, kGreaterThanZero)
+          .put(kTableReadRpcCount, 1.0)
+          .put(kTableReadRpcWaitTime, kGreaterThanZero)
+          .put(kDocDBScannedIndexRows, 307.0)
+          .put(kDocDBScannedTableRows, 307.0).build();
+
+      final ImmutableMap<String, Double> kExpSummaryFields = ImmutableMap.<String, Double>builder()
+          .put(kTotalReadRpcWaitTime, kGreaterThanZero)
+          .put(kTotalWriteRpcCount, 308.0)
+          .put(kTotalWriteRpcWaitTime, kGreaterThanZero)
+          .put(kDocDBScannedRows, 614.0).build();
 
       // UPDATE using index, a large payload updating wide text column
       testExplainOneQuery(stmt, String.format(
@@ -499,36 +543,55 @@ public class TestPgExplainAnalyze extends BasePgSQLTest {
                    ImmutableList.of(
                        new ExpectedNodeFields(
                            "Index Scan", kTableName, "t", kIndexName,
-                           ImmutableMap.of(
-                               kReadRpcCount, 1.0,
-                               kReadRpcWaitTime, kGreaterThanZero,
-                               kTableReadRpcCount, 1.0,
-                               kTableReadRpcWaitTime, kGreaterThanZero))),
-                   ImmutableMap.of(
-                       kTotalReadRpcWaitTime, kGreaterThanZero,
-                       kTotalWriteRpcCount, 308.0,
-                       kTotalWriteRpcWaitTime, kGreaterThanZero));
+                               kExpNodeFields)),
+                    kExpSummaryFields);
+      }
 
-      // DELETE using index
-      testExplainOneQuery(stmt, String.format(
-          "/*+ IndexScan(t %s) */DELETE FROM %s AS t WHERE c1 >= 1000", kPkIndexName, kTableName),
-                   ImmutableList.of(
-                       new ExpectedNodeFields(
-                           "Index Scan", kTableName, "t", kPkIndexName,
-                           ImmutableMap.of(
-                               kReadRpcCount, 8.0,
-                               kReadRpcWaitTime, kGreaterThanZero,
-                               kTableReadRpcCount, kShouldNotExist,
-                               kTableReadRpcWaitTime, kShouldNotExist))),
-                   ImmutableMap.of(
-                       kTotalReadRpcWaitTime, kGreaterThanZero,
-                       kTotalWriteRpcCount, 14.0,
-                       kTotalWriteRpcWaitTime, kGreaterThanZero));
+
+      //{
+      //final ImmutableMap<String, Double> kExpNodeFields = ImmutableMap.<String, Double>builder()
+      //    .put(kReadRpcCount, 8.0)
+      //    .put(kReadRpcWaitTime, kGreaterThanZero)
+      //    .put(kTableReadRpcCount, kShouldNotExist)
+      //    .put(kTableReadRpcWaitTime, kShouldNotExist)
+      //    .put(kDocDBScannedIndexRows, kShouldNotExist)
+      //    .put(kDocDBScannedTableRows, kShouldNotExist).build();
+
+      //final ImmutableMap<String, Double> kExpSummaryFields = ImmutableMap.<String, Double>builder()
+      //    .put(kTotalReadRpcWaitTime, kGreaterThanZero)
+      //    .put(kTotalWriteRpcCount, 14.0)
+      //    .put(kTotalWriteRpcWaitTime, kGreaterThanZero)
+      //    .put(kDocDBScannedRows, 0.0).build();
+
+      //// DELETE using index
+      //testExplainOneQuery(stmt, String.format(
+      //    "/*+ IndexScan(t %s) */DELETE FROM %s AS t WHERE c1 >= 1000", kPkIndexName, kTableName),
+      //             ImmutableList.of(
+      //                 new ExpectedNodeFields(
+      //                     "Index Scan", kTableName, "t", kPkIndexName,
+      //                     kExpNodeFields)),
+      //              kExpSummaryFields);
+      //}
 
 
       // start transaction before deleting everything so we can rollback and get the data
       // back for subsequent tests
       stmt.execute("BEGIN");
+
+      {
+      final ImmutableMap<String, Double> kExpScanNodeFields = ImmutableMap.<String, Double>builder()
+          .put(kReadRpcCount, 8.0)
+          .put(kReadRpcWaitTime, kGreaterThanZero)
+          .put(kTableReadRpcCount, kShouldNotExist)
+          .put(kTableReadRpcWaitTime, kShouldNotExist)
+          .put(kDocDBScannedIndexRows, kShouldNotExist)
+          .put(kDocDBScannedTableRows, 7508.0).build();
+
+      final ImmutableMap<String, Double> kExpSummaryFields = ImmutableMap.<String, Double>builder()
+          .put(kTotalReadRpcWaitTime, kGreaterThanZero)
+          .put(kTotalWriteRpcCount, 30.0)
+          .put(kTotalWriteRpcWaitTime, kGreaterThanZero)
+          .put(kDocDBScannedRows, 7508.0).build();
 
       // DELETE without WHERE (
       testExplainOneQuery(stmt, String.format(
@@ -536,36 +599,54 @@ public class TestPgExplainAnalyze extends BasePgSQLTest {
                    ImmutableList.of(
                        new ExpectedNodeFields(
                            "Seq Scan", kTableName, kTableName, "",
-                           ImmutableMap.of(
-                               kReadRpcCount, 5.0,
-                               kReadRpcWaitTime, kGreaterThanZero,
-                               kTableReadRpcCount, kShouldNotExist,
-                               kTableReadRpcWaitTime, kShouldNotExist))),
-                   ImmutableMap.of(
-                       kTotalReadRpcWaitTime, kGreaterThanZero,
-                       kTotalWriteRpcCount, 20.0,
-                       kTotalWriteRpcWaitTime, kGreaterThanZero));
+                           kExpScanNodeFields)),
+                    kExpSummaryFields);
+      }
 
+      {
       // Do it again - should be no writes
+      final ImmutableMap<String, Double> kExpScanNodeFields = ImmutableMap.<String, Double>builder()
+          .put(kReadRpcCount, 1.0)
+          .put(kReadRpcWaitTime, kGreaterThanZero)
+          .put(kTableReadRpcCount, kShouldNotExist)
+          .put(kTableReadRpcWaitTime, kShouldNotExist)
+          .put(kDocDBScannedIndexRows, kShouldNotExist)
+          .put(kDocDBScannedTableRows, 0.0).build();
+
+      final ImmutableMap<String, Double> kExpSummaryFields = ImmutableMap.<String, Double>builder()
+          .put(kTotalReadRpcWaitTime, kGreaterThanZero)
+          .put(kTotalWriteRpcCount, kShouldNotExist)
+          .put(kTotalWriteRpcWaitTime, kShouldNotExist)
+          .put(kDocDBScannedRows, 0.0).build();
+
       testExplainOneQuery(stmt, String.format(
           "DELETE FROM %s", kTableName),
                    ImmutableList.of(
                        new ExpectedNodeFields(
                            "Seq Scan", kTableName, kTableName, "",
-                           ImmutableMap.of(
-                               kReadRpcCount, 1.0,
-                               kReadRpcWaitTime, kGreaterThanZero,
-                               kTableReadRpcCount, kShouldNotExist,
-                               kTableReadRpcWaitTime, kShouldNotExist))),
-                   ImmutableMap.of(
-                       kTotalReadRpcWaitTime, kGreaterThanZero,
-                       kTotalWriteRpcCount, kShouldNotExist,
-                       kTotalWriteRpcWaitTime, kShouldNotExist));
+                           kExpScanNodeFields)),
+                    kExpSummaryFields);
+      }
 
       stmt.execute("ROLLBACK");
 
       // Test that "TIMING false" option suppressing RPC wait time printing
       stmt.execute("BEGIN");
+      {
+      final ImmutableMap<String, Double> kExpScanNodeFields = ImmutableMap.<String, Double>builder()
+          .put(kReadRpcCount, 1.0)
+          .put(kReadRpcWaitTime, kShouldNotExist)
+          .put(kTableReadRpcCount, 1.0)
+          .put(kTableReadRpcWaitTime, kShouldNotExist)
+          .put(kDocDBScannedIndexRows, 307.0)
+          .put(kDocDBScannedTableRows, 307.0).build();
+
+      final ImmutableMap<String, Double> kExpSummaryFields = ImmutableMap.<String, Double>builder()
+          .put(kTotalReadRpcWaitTime, kShouldNotExist)
+          .put(kTotalWriteRpcCount, 308.0)
+          .put(kTotalWriteRpcWaitTime, kShouldNotExist)
+          .put(kDocDBScannedRows, 614.0).build();
+
       testExplainOneQueryNoTiming(stmt, String.format(
           "/*+ IndexScan(t %s) */"
           + "UPDATE %s AS t SET c4 = rpad(c1::text, 256, '@') WHERE c2 = 1 AND c3 <= 8",
@@ -573,49 +654,76 @@ public class TestPgExplainAnalyze extends BasePgSQLTest {
                    ImmutableList.of(
                        new ExpectedNodeFields(
                            "Index Scan", kTableName, "t", kIndexName,
-                           ImmutableMap.of(
-                               kReadRpcCount, 1.0,
-                               kReadRpcWaitTime, kShouldNotExist,
-                               kTableReadRpcCount, 1.0,
-                               kTableReadRpcWaitTime, kShouldNotExist))),
-                   ImmutableMap.of(
-                       kTotalReadRpcWaitTime, kShouldNotExist,
-                       kTotalWriteRpcCount, 206.0,
-                       kTotalWriteRpcWaitTime, kShouldNotExist));
+                           kExpScanNodeFields)),
+                    kExpSummaryFields);
+      }
       stmt.execute("ROLLBACK");
 
 
       // Modification statements with RETURNING
 
-      testExplainOneQuery(stmt, String.format(
-          "INSERT INTO %s VALUES (1001, 0, 0, 'abc') RETURNING *", kTableName),
-                   ImmutableList.of(
-                       new ExpectedNodeFields(
-                           "Result", "", "", "",
-                           ImmutableMap.of(
-                               kReadRpcCount, kShouldNotExist,
-                               kReadRpcWaitTime, kShouldNotExist,
-                               kTableReadRpcCount, kShouldNotExist,
-                               kTableReadRpcWaitTime, kShouldNotExist))),
-                   ImmutableMap.of(
-                       kTotalReadRpcWaitTime, kShouldNotExist,
-                       kTotalWriteRpcCount, 1.0,
-                       kTotalWriteRpcWaitTime, kGreaterThanZero));
+      //{
+      //final ImmutableMap<String, Double> kExpNodeFields = ImmutableMap.<String, Double>builder()
+      //    .put(kReadRpcCount, kShouldNotExist)
+      //    .put(kReadRpcWaitTime, kShouldNotExist)
+      //    .put(kTableReadRpcCount, kShouldNotExist)
+      //    .put(kTableReadRpcWaitTime, kShouldNotExist)
+      //    .put(kDocDBScannedIndexRows, kShouldNotExist)
+      //    .put(kDocDBScannedTableRows, kShouldNotExist).build();
+
+      //final ImmutableMap<String, Double> kExpSummaryFields = ImmutableMap.<String, Double>builder()
+      //    .put(kTotalReadRpcWaitTime, kShouldNotExist)
+      //    .put(kTotalWriteRpcCount, 1.0)
+      //    .put(kTotalWriteRpcWaitTime, kGreaterThanZero)
+      //    .put(kDocDBScannedRows, 0.0).build();
+
+      //testExplainOneQuery(stmt, String.format(
+      //    "INSERT INTO %s VALUES (1001, 0, 0, 'abc') RETURNING *", kTableName),
+      //             ImmutableList.of(
+      //                 new ExpectedNodeFields(
+      //                     "Result", "", "", "",
+      //                     kExpNodeFields)),
+      //              kExpSummaryFields);
+      //}
+
+      {
+      final ImmutableMap<String, Double> kExpNodeFields = ImmutableMap.<String, Double>builder()
+          .put(kReadRpcCount, 1.0)
+          .put(kReadRpcWaitTime, kGreaterThanZero)
+          .put(kTableReadRpcCount, kShouldNotExist)
+          .put(kTableReadRpcWaitTime, kShouldNotExist)
+          .put(kDocDBScannedIndexRows, 0.0)
+          .put(kDocDBScannedTableRows, 1.0).build();
+
+      final ImmutableMap<String, Double> kExpSummaryFields = ImmutableMap.<String, Double>builder()
+          .put(kTotalReadRpcWaitTime, kGreaterThanZero)
+          .put(kTotalWriteRpcCount, 2.0)
+          .put(kTotalWriteRpcWaitTime, kGreaterThanZero)
+          .put(kDocDBScannedRows, 1.0).build();
 
       testExplainOneQuery(stmt, String.format(
           "UPDATE %s SET c4 = rpad(c1::text, 256, '*') WHERE c1 = 1001 RETURNING *", kTableName),
                    ImmutableList.of(
                        new ExpectedNodeFields(
                            "Index Scan", kTableName, kTableName, kPkIndexName,
-                           ImmutableMap.of(
-                               kReadRpcCount, 1.0,
-                               kReadRpcWaitTime, kGreaterThanZero,
-                               kTableReadRpcCount, kShouldNotExist,
-                               kTableReadRpcWaitTime, kShouldNotExist))),
-                   ImmutableMap.of(
-                       kTotalReadRpcWaitTime, kGreaterThanZero,
-                       kTotalWriteRpcCount, 2.0,
-                       kTotalWriteRpcWaitTime, kGreaterThanZero));
+                           kExpNodeFields)),
+                    kExpSummaryFields);
+      }
+
+      {
+      final ImmutableMap<String, Double> kExpNodeFields = ImmutableMap.<String, Double>builder()
+          .put(kReadRpcCount, 5.0)
+          .put(kReadRpcWaitTime, kGreaterThanZero)
+          .put(kTableReadRpcCount, kShouldNotExist)
+          .put(kTableReadRpcWaitTime, kShouldNotExist)
+          .put(kDocDBScannedIndexRows, kShouldNotExist)
+          .put(kDocDBScannedTableRows, kShouldNotExist).build();
+
+      final ImmutableMap<String, Double> kExpSummaryFields = ImmutableMap.<String, Double>builder()
+          .put(kTotalReadRpcWaitTime, kGreaterThanZero)
+          .put(kTotalWriteRpcCount, 13.0)
+          .put(kTotalWriteRpcWaitTime, kGreaterThanZero)
+          .put(kDocDBScannedRows, 0.0).build();
 
       testExplainOneQuery(stmt, String.format(
           "/*+ IndexScan(t %s) */DELETE FROM %s AS t WHERE c1 >= 500 RETURNING *",
@@ -623,15 +731,9 @@ public class TestPgExplainAnalyze extends BasePgSQLTest {
                    ImmutableList.of(
                        new ExpectedNodeFields(
                            "Index Scan", kTableName, "t", kPkIndexName,
-                           ImmutableMap.of(
-                               kReadRpcCount, 5.0,
-                               kReadRpcWaitTime, kGreaterThanZero,
-                               kTableReadRpcCount, kShouldNotExist,
-                               kTableReadRpcWaitTime, kShouldNotExist))),
-                   ImmutableMap.of(
-                       kTotalReadRpcWaitTime, kGreaterThanZero,
-                       kTotalWriteRpcCount, 13.0,
-                       kTotalWriteRpcWaitTime, kGreaterThanZero));
+                           kExpNodeFields)),
+                    kExpSummaryFields);
+      }
     }
   }
 }

@@ -141,7 +141,9 @@ static void escape_yaml(StringInfo buf, const char *str);
 static void appendPgMemInfo(ExplainState *es, const Size peakMem);
 static void ExplainIndexOnlyScanRows(IndexOnlyScanState *node, ExplainState* es);
 static void ExplainIndexScanRows(IndexScanState *node, ExplainState* es);
-static void ExplainSeqScanRows(SeqScanState *node, ExplainState *es);
+//static void ExplainSeqScanRows(SeqScanState *node, ExplainState *es);
+static void ExplainYbSeqScanRows(YbSeqScanState *node, ExplainState *es);
+static void ExplainSubqueryScanRows(SubqueryScanState *node, ExplainState *es);
 
 /*
  * ExplainQuery -
@@ -1678,8 +1680,10 @@ ExplainNode(PlanState *planstate, List *ancestors,
 			if (es->rpc && es->analyze && planstate->instrument->nloops > 0)
 				show_yb_rpc_stats(planstate, es);
 
+			/*
 			if (es->docdb)
-				ExplainSeqScanRows((SeqScanState *) planstate, es);
+				ExplainSubqueryScanRows((SubqueryScanState *) planstate, es);
+				*/
 			break;
 		case T_YbSeqScan:
 			/*
@@ -1692,7 +1696,7 @@ ExplainNode(PlanState *planstate, List *ancestors,
 				show_instrumentation_count("Rows Removed by Filter", 1,
 										   planstate, es);
 			if (es->docdb)
-				ExplainSeqScanRows((SeqScanState *) planstate, es);
+				ExplainYbSeqScanRows((YbSeqScanState *) planstate, es);
 			break;
 		case T_Gather:
 			{
@@ -4037,6 +4041,51 @@ appendPgMemInfo(ExplainState *es, const Size peakMem)
 }
 
 static void
+ExplainYbSeqScanRows(YbSeqScanState *node, ExplainState *es)
+{
+	ScanState	   ss = node->ss;
+	YbScanDesc	   ybscan = ss.ss_currentScanDesc->ybscan;
+	YBCPgStatement handle = ybscan->handle;
+	double		   nl = ((PlanState *) node)->instrument->nloops;
+	if (nl == 0)
+		return;
+
+	YBCSelectStats stats;
+	memset(&stats, 0, sizeof(YBCSelectStats));
+	YBCPgRetrieveSelectStats(handle, &stats);
+
+	uint   irows = stats.docdb_table_scanned_row_count;
+	double rows = irows / nl;
+	ExplainPropertyFloat("DocDB Scanned Table Rows", NULL, rows,
+						 rows < 1 ? 2 : 0, es);
+
+	es->yb_docdb_total_scanned_rows += irows;
+}
+
+static void
+ExplainSubqueryScanRows(SubqueryScanState *node, ExplainState *es)
+{
+	ScanState	   ss = node->ss;
+	YbScanDesc	   ybscan = ss.ss_currentScanDesc->ybscan;
+	YBCPgStatement handle = ybscan->handle;
+	double		   nl = ((PlanState *) node)->instrument->nloops;
+	if (nl == 0)
+		return;
+
+	YBCSelectStats stats;
+	memset(&stats, 0, sizeof(YBCSelectStats));
+	YBCPgRetrieveSelectStats(handle, &stats);
+
+	uint   irows = stats.docdb_table_scanned_row_count;
+	double rows = irows / nl;
+	ExplainPropertyFloat("DocDB Scanned Table Rows", NULL, rows,
+						 rows < 1 ? 2 : 0, es);
+
+	es->yb_docdb_total_scanned_rows += irows;
+}
+
+/*
+static void
 ExplainSeqScanRows(SeqScanState *node, ExplainState *es)
 {
 	ScanState	   ss = node->ss;
@@ -4057,6 +4106,7 @@ ExplainSeqScanRows(SeqScanState *node, ExplainState *es)
 
 	es->yb_docdb_total_scanned_rows += irows;
 }
+*/
 
 static void
 ExplainIndexOnlyScanRows(IndexOnlyScanState *node, ExplainState* es)
