@@ -548,30 +548,31 @@ public class TestPgExplainAnalyze extends BasePgSQLTest {
       }
 
 
-      //{
-      //final ImmutableMap<String, Double> kExpNodeFields = ImmutableMap.<String, Double>builder()
-      //    .put(kReadRpcCount, 8.0)
-      //    .put(kReadRpcWaitTime, kGreaterThanZero)
-      //    .put(kTableReadRpcCount, kShouldNotExist)
-      //    .put(kTableReadRpcWaitTime, kShouldNotExist)
-      //    .put(kDocDBScannedIndexRows, kShouldNotExist)
-      //    .put(kDocDBScannedTableRows, kShouldNotExist).build();
+      {
+      final ImmutableMap<String, Double> kExpNodeFields = ImmutableMap.<String, Double>builder()
+          .put(kReadRpcCount, 8.0)
+          .put(kReadRpcWaitTime, kGreaterThanZero)
+          .put(kTableReadRpcCount, kShouldNotExist)
+          .put(kTableReadRpcWaitTime, kShouldNotExist)
+          .put(kDocDBScannedIndexRows, kShouldNotExist)
+          .put(kDocDBScannedTableRows, kShouldNotExist).build();
 
-      //final ImmutableMap<String, Double> kExpSummaryFields = ImmutableMap.<String, Double>builder()
-      //    .put(kTotalReadRpcWaitTime, kGreaterThanZero)
-      //    .put(kTotalWriteRpcCount, 14.0)
-      //    .put(kTotalWriteRpcWaitTime, kGreaterThanZero)
-      //    .put(kDocDBScannedRows, 0.0).build();
+      final ImmutableMap<String, Double> kExpSummaryFields = ImmutableMap.<String, Double>builder()
+          .put(kTotalReadRpcWaitTime, kGreaterThanZero)
+          .put(kTotalWriteRpcCount, 14.0)
+          .put(kTotalWriteRpcWaitTime, kGreaterThanZero)
+          .put(kDocDBScannedRows, 0.0).build();
 
-      //// DELETE using index
-      //testExplainOneQuery(stmt, String.format(
-      //    "/*+ IndexScan(t %s) */DELETE FROM %s AS t WHERE c1 >= 1000", kPkIndexName, kTableName),
-      //             ImmutableList.of(
-      //                 new ExpectedNodeFields(
-      //                     "Index Scan", kTableName, "t", kPkIndexName,
-      //                     kExpNodeFields)),
-      //              kExpSummaryFields);
-      //}
+      // DELETE using index
+      testExplainOneQuery(stmt, String.format(
+          // "/*+ IndexScan(t %s) */"
+          "DELETE FROM %s AS t WHERE c1 >= 1000", /* kPkIndexName, */ kTableName),
+                   ImmutableList.of(
+                       new ExpectedNodeFields(
+                           "Index Scan", kTableName, "t", kPkIndexName,
+                           kExpNodeFields)),
+                    kExpSummaryFields);
+      }
 
 
       // start transaction before deleting everything so we can rollback and get the data
@@ -662,29 +663,29 @@ public class TestPgExplainAnalyze extends BasePgSQLTest {
 
       // Modification statements with RETURNING
 
-      //{
-      //final ImmutableMap<String, Double> kExpNodeFields = ImmutableMap.<String, Double>builder()
-      //    .put(kReadRpcCount, kShouldNotExist)
-      //    .put(kReadRpcWaitTime, kShouldNotExist)
-      //    .put(kTableReadRpcCount, kShouldNotExist)
-      //    .put(kTableReadRpcWaitTime, kShouldNotExist)
-      //    .put(kDocDBScannedIndexRows, kShouldNotExist)
-      //    .put(kDocDBScannedTableRows, kShouldNotExist).build();
+      {
+      final ImmutableMap<String, Double> kExpNodeFields = ImmutableMap.<String, Double>builder()
+          .put(kReadRpcCount, kShouldNotExist)
+          .put(kReadRpcWaitTime, kShouldNotExist)
+          .put(kTableReadRpcCount, kShouldNotExist)
+          .put(kTableReadRpcWaitTime, kShouldNotExist)
+          .put(kDocDBScannedIndexRows, kShouldNotExist)
+          .put(kDocDBScannedTableRows, kShouldNotExist).build();
 
-      //final ImmutableMap<String, Double> kExpSummaryFields = ImmutableMap.<String, Double>builder()
-      //    .put(kTotalReadRpcWaitTime, kShouldNotExist)
-      //    .put(kTotalWriteRpcCount, 1.0)
-      //    .put(kTotalWriteRpcWaitTime, kGreaterThanZero)
-      //    .put(kDocDBScannedRows, 0.0).build();
+      final ImmutableMap<String, Double> kExpSummaryFields = ImmutableMap.<String, Double>builder()
+          .put(kTotalReadRpcWaitTime, kShouldNotExist)
+          .put(kTotalWriteRpcCount, 1.0)
+          .put(kTotalWriteRpcWaitTime, kGreaterThanZero)
+          .put(kDocDBScannedRows, 0.0).build();
 
-      //testExplainOneQuery(stmt, String.format(
-      //    "INSERT INTO %s VALUES (1001, 0, 0, 'abc') RETURNING *", kTableName),
-      //             ImmutableList.of(
-      //                 new ExpectedNodeFields(
-      //                     "Result", "", "", "",
-      //                     kExpNodeFields)),
-      //              kExpSummaryFields);
-      //}
+      testExplainOneQuery(stmt, String.format(
+          "INSERT INTO %s VALUES (1001, 0, 0, 'abc') RETURNING *", kTableName),
+                   ImmutableList.of(
+                       new ExpectedNodeFields(
+                           "Result", "", "", "",
+                           kExpNodeFields)),
+                    kExpSummaryFields);
+      }
 
       {
       final ImmutableMap<String, Double> kExpNodeFields = ImmutableMap.<String, Double>builder()
@@ -726,7 +727,8 @@ public class TestPgExplainAnalyze extends BasePgSQLTest {
           .put(kDocDBScannedRows, 0.0).build();
 
       testExplainOneQuery(stmt, String.format(
-          "/*+ IndexScan(t %s) */DELETE FROM %s AS t WHERE c1 >= 500 RETURNING *",
+          // "/*+ IndexScan(t %s) */"
+          " DELETE FROM %s AS t WHERE c1 >= 500 RETURNING *",
           kPkIndexName, kTableName),
                    ImmutableList.of(
                        new ExpectedNodeFields(
