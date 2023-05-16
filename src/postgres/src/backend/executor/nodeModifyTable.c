@@ -64,12 +64,16 @@
 #include "executor/tuptable.h"
 #include "foreign/fdwapi.h"
 #include "miscadmin.h"
+#include "nodes/execnodes.h"
 #include "nodes/nodeFuncs.h"
+#include "nodes/nodes.h"
+#include "nodes/plannodes.h"
 #include "storage/bufmgr.h"
 #include "storage/lmgr.h"
 #include "utils/builtins.h"
 #include "utils/elog.h"
 #include "utils/memutils.h"
+#include "utils/palloc.h"
 #include "utils/rel.h"
 #include "utils/tqual.h"
 #include "utils/typcache.h"
@@ -87,7 +91,9 @@
 #include "optimizer/ybcplan.h"
 #include "utils/syscache.h"
 
-#define INSERT_BATCH_SIZE 1024
+#define INSERT_BATCH_SIZE (1024*3)
+
+bool yb_enable_batched_inserts = false;
 
 static bool ExecOnConflictUpdate(ModifyTableState *mtstate,
 					 ResultRelInfo *resultRelInfo,
@@ -304,7 +310,7 @@ ExecBatchedInsert(ModifyTableState *mtstate,
 		   bool canSetTag,
 		   Size curBatchSize)
 {
-	HeapTuple	tuple;
+	// HeapTuple	tuple;
 	// A array to hold all tuples in a batch as a buffer
 	HeapTuple* 	tuples;
 	ResultRelInfo *resultRelInfo;
@@ -331,6 +337,7 @@ ExecBatchedInsert(ModifyTableState *mtstate,
 	resultRelInfo = estate->es_result_relation_info;
 	resultRelationDesc = resultRelInfo->ri_RelationDesc;
 
+	// Materialize slots in the tuples
 	for (int i = 0; i < curBatchSize; ++i)
 	{
 		TupleTableSlot* slot = slots[i];
@@ -338,7 +345,7 @@ ExecBatchedInsert(ModifyTableState *mtstate,
 		 * get the heap tuple out of the tuple table slot, making sure we have a
 		 * writable copy
 		 */
-		tuple = ExecMaterializeSlot(slot);
+		HeapTuple tuple = ExecMaterializeSlot(slot);
 
 		if (resultRelationDesc->rd_rel->relhasoids)
 		{
@@ -370,7 +377,7 @@ ExecBatchedInsert(ModifyTableState *mtstate,
 	}
 
 	// M0
-	Assert(onconflict == ONCONFLICT_NOTHING);
+	Assert(onconflict == ONCONFLICT_NOTHING || onconflict == ONCONFLICT_NONE);
 
 	// Send conflict check in batches
 	if (onconflict != ONCONFLICT_NONE && resultRelInfo->ri_NumIndices > 0)
@@ -381,41 +388,71 @@ ExecBatchedInsert(ModifyTableState *mtstate,
 
 		arbiterIndexes = resultRelInfo->ri_onConflictArbiterIndexes;
 
+		// F - conflict, T - no conflict
+		bool* conflictMap = palloc(curBatchSize * sizeof(bool));
+		for (int i = 0; i < curBatchSize; ++i)
+		{
+			ItemPointerData conflictTid;
+			TupleTableSlot* slot = slots[i];
+
+			conflictMap[i] = ExecCheckIndexConstraints(slot, estate, &conflictTid,
+										   arbiterIndexes);
+
+		}
 
 		for (int i = 0; i < curBatchSize; ++i)
 		{
 			bool			specConflict;
-			ItemPointerData conflictTid;
-
+			HeapTuple tuple = tuples[i];
 			TupleTableSlot* slot = slots[i];
+
 			// TODO this should be in batches
-			if (!ExecCheckIndexConstraints(slot, estate, &conflictTid,
-										   arbiterIndexes))
+			if (!conflictMap[i])
 			{
 				/* committed conflict tuple found */
 				if (onconflict == ONCONFLICT_UPDATE)
 				{
 					Assert(false);
+					// if (ExecOnConflictUpdate(mtstate, resultRelInfo,
+					// 						 &conflictTid, planSlot, slot,
+					// 						 estate, canSetTag, &returning))
+					// {
+					// 	InstrCountTuples2(&mtstate->ps, 1);
+					// 	result = returning;
+					// 	//goto conflict_resolved;
+					// 	continue;
+					// }
+					// else
+					//		goto vlock;
 				}
 				else
 				{
+					// conflict do nothing when conflicts
 					/*
 					 * In case of ON CONFLICT DO NOTHING, do nothing. However,
 					 * verify that the tuple is visible to the executor's MVCC
 					 * snapshot at higher isolation levels.
 					 */
 					Assert(onconflict == ONCONFLICT_NOTHING);
-					if (!IsYBRelation(resultRelationDesc))
-					{
-						// YugaByte does not use Postgres transaction control
-						// code.
-						ExecCheckTIDVisible(estate, resultRelInfo,
-											&conflictTid);
-					}
+					// if (!IsYBRelation(resultRelationDesc))
+					// {
+					// 	// YugaByte does not use Postgres transaction control
+					// 	// code.
+					// 	ExecCheckTIDVisible(estate, resultRelInfo,
+					// 						&conflictTid);
+					// }
 					InstrCountTuples2(&mtstate->ps, 1);
 					result = NULL;
-					goto conflict_resolved;
+					//goto conflict_resolved;
+
+					// conflict resolved:
+					if (slots[i] != NULL)
+					{
+						ExecDropSingleTupleTableSlot(slots[i]);
+						slots[i] = NULL;
+					}
 				}
+				continue;
 			}
 
 			// no conflict TODO in batches
@@ -434,15 +471,20 @@ ExecBatchedInsert(ModifyTableState *mtstate,
 													   arbiterIndexes);
 			}
 			else {
+				ereport(ERROR, (errmsg("Not a YB relation.")));
 				Assert(false);
 			}
 		}
+
+		// loop ends
+		goto finished;
 	}
 	else {
 		// insert normally no on conflict
 		for (int i = 0; i < curBatchSize; ++i)
 		{
 			TupleTableSlot* slot = slots[i];
+			HeapTuple tuple = tuples[i];
 			if (IsYBRelation(resultRelationDesc))
 			{
 				MemoryContext oldContext = MemoryContextSwitchTo(GetPerTupleMemoryContext(estate));
@@ -487,11 +529,12 @@ ExecBatchedInsert(ModifyTableState *mtstate,
 	list_free(recheckIndexes);
 
 	// TODO
-conflict_resolved:
+//conflict_resolved:
 	if (estate->yb_conflict_slot != NULL) {
 		ExecDropSingleTupleTableSlot(estate->yb_conflict_slot);
 		estate->yb_conflict_slot = NULL;
 	}
+finished:
 	return result;
 }
 
@@ -2655,13 +2698,13 @@ ExecBatchModifyTable(PlanState *pstate)
 	ResultRelInfo *saved_resultRelInfo;
 	ResultRelInfo *resultRelInfo;
 	PlanState  *subplanstate;
-	JunkFilter *junkfilter;
-	TupleTableSlot *slot;
-	TupleTableSlot *planSlot;
+	//JunkFilter *junkfilter;
+	//TupleTableSlot *slot;
+	//TupleTableSlot *planSlot;
 	//ItemPointer tupleid;
 	//ItemPointerData tuple_ctid;
-	HeapTupleData oldtupdata;
-	HeapTuple	oldtuple;
+	//HeapTupleData oldtupdata;
+	//HeapTuple	oldtuple;
 
 	CHECK_FOR_INTERRUPTS();
 
@@ -2698,7 +2741,7 @@ ExecBatchModifyTable(PlanState *pstate)
 	/* Preload local variables */
 	resultRelInfo = node->resultRelInfo + node->mt_whichplan;
 	subplanstate = node->mt_plans[node->mt_whichplan];
-	junkfilter = resultRelInfo->ri_junkFilter;
+	//junkfilter = resultRelInfo->ri_junkFilter;
 
 	/*
 	 * es_result_relation_info must point to the currently active result
@@ -2726,13 +2769,13 @@ ExecBatchModifyTable(PlanState *pstate)
 		 * to do this below the top level of the plan, however.  We might need
 		 * to rethink this later.
 		 */
-		ResetPerTupleExprContext(estate);
+		//ResetPerTupleExprContext(estate);
 
 		int i = 0;
 		// Collect rows in batches
 		for (i = 0; i < INSERT_BATCH_SIZE; ++i)
 		{
-			planSlot = ExecProcNode(subplanstate);
+			TupleTableSlot* planSlot = ExecProcNode(subplanstate);
 
 			// stop if no slot found
 			if (TupIsNull(planSlot))
@@ -2740,10 +2783,12 @@ ExecBatchModifyTable(PlanState *pstate)
 
 			//
 			EvalPlanQualSetSlot(&node->mt_epqstate, planSlot);
-			slot = planSlot;
+			TupleTableSlot* slot = planSlot;
 
-			slots[i] = slot;
-			planSlots[i] = planSlot;
+			planSlots[i] = MakeTupleTableSlot(planSlot->tts_tupleDescriptor);
+			ExecCopySlot(planSlots[i], planSlot);
+			slots[i] = MakeTupleTableSlot(slot->tts_tupleDescriptor);
+			ExecCopySlot(slots[i], slot);
 
 			//
 		}

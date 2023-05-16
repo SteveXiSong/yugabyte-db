@@ -40,7 +40,6 @@
 
 
 bool yb_bnl_enable_hashing = true;
-bool yb_enable_batched_inserts = false;
 
 /* Methods to help keep track of outer tuple batches */
 bool CreateBatch(YbBatchedNestLoopState *bnlstate, ExprContext *econtext);
