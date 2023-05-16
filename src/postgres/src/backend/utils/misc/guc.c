@@ -22,6 +22,7 @@
 #include <limits.h>
 #include <unistd.h>
 #include <sys/stat.h>
+#include "utils/guc.h"
 #ifdef HAVE_SYSLOG
 #include <syslog.h>
 #endif
@@ -1025,6 +1026,15 @@ static struct config_bool ConfigureNamesBool[] =
 			NULL
 		},
 		&yb_bnl_enable_hashing,
+		true,
+		NULL, NULL, NULL
+	},
+	{
+		{"yb_enable_batched_inserts", PGC_USERSET, QUERY_TUNING_METHOD,
+			gettext_noop("Enables batched inserts."),
+			NULL
+		},
+		&yb_enable_batched_inserts,
 		true,
 		NULL, NULL, NULL
 	},

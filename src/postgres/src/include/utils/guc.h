@@ -261,6 +261,7 @@ extern double log_xact_sample_rate;
 
 extern int	yb_bnl_batch_size;
 extern bool  yb_bnl_enable_hashing;
+extern bool  yb_enable_batched_inserts;
 
 extern int	temp_file_limit;
 

@@ -53,18 +53,22 @@
 
 #include "postgres.h"
 
+#include "access/htup.h"
 #include "access/htup_details.h"
 #include "access/xact.h"
+#include "c.h"
 #include "commands/trigger.h"
 #include "executor/execPartition.h"
 #include "executor/executor.h"
 #include "executor/nodeModifyTable.h"
+#include "executor/tuptable.h"
 #include "foreign/fdwapi.h"
 #include "miscadmin.h"
 #include "nodes/nodeFuncs.h"
 #include "storage/bufmgr.h"
 #include "storage/lmgr.h"
 #include "utils/builtins.h"
+#include "utils/elog.h"
 #include "utils/memutils.h"
 #include "utils/rel.h"
 #include "utils/tqual.h"
@@ -82,6 +86,8 @@
 #include "pg_yb_utils.h"
 #include "optimizer/ybcplan.h"
 #include "utils/syscache.h"
+
+#define INSERT_BATCH_SIZE 1024
 
 static bool ExecOnConflictUpdate(ModifyTableState *mtstate,
 					 ResultRelInfo *resultRelInfo,
@@ -289,6 +295,206 @@ ExecCheckTIDVisible(EState *estate,
 	ExecCheckHeapTupleVisible(estate, &tuple, buffer);
 	ReleaseBuffer(buffer);
 }
+
+static TupleTableSlot *
+ExecBatchedInsert(ModifyTableState *mtstate,
+		   TupleTableSlot **slots,
+		   TupleTableSlot **planSlots,
+		   EState *estate,
+		   bool canSetTag,
+		   Size curBatchSize)
+{
+	HeapTuple	tuple;
+	// A array to hold all tuples in a batch as a buffer
+	HeapTuple* 	tuples;
+	ResultRelInfo *resultRelInfo;
+	Relation	resultRelationDesc;
+	Oid			newId;
+	List	   *recheckIndexes = NIL;
+	TupleTableSlot *result = NULL;
+	//TransitionCaptureState *ar_insert_trig_tcs;
+	ModifyTable *node = (ModifyTable *) mtstate->ps.plan;
+	OnConflictAction onconflict = node->onConflictAction;
+
+	// allocate space for the buffer
+	tuples = palloc(curBatchSize * sizeof(HeapTuple));
+
+	/*
+	 * The attribute "yb_conflict_slot" is only used within ExecInsert.
+	 * Initialize its value to NULL.
+	 */
+	estate->yb_conflict_slot = NULL;
+
+	/*
+	 * get information on the (current) result relation
+	 */
+	resultRelInfo = estate->es_result_relation_info;
+	resultRelationDesc = resultRelInfo->ri_RelationDesc;
+
+	for (int i = 0; i < curBatchSize; ++i)
+	{
+		TupleTableSlot* slot = slots[i];
+		/*
+		 * get the heap tuple out of the tuple table slot, making sure we have a
+		 * writable copy
+		 */
+		tuple = ExecMaterializeSlot(slot);
+
+		if (resultRelationDesc->rd_rel->relhasoids)
+		{
+			Oid tuple_oid = InvalidOid;
+
+			if (IsYsqlUpgrade && IsYBRelation(resultRelationDesc))
+				tuple_oid = slot->tts_yb_insert_oid;
+
+			HeapTupleSetOid(tuple, tuple_oid);
+		}
+
+		/*
+		 * Constraints might reference the tableoid column, so initialize
+		 * t_tableOid before evaluating them.
+		 */
+		tuple->t_tableOid = RelationGetRelid(resultRelationDesc);
+
+		// With check
+
+		/*
+		 * Check the constraints of the tuple.
+		 */
+		if (resultRelationDesc->rd_att->constr)
+			ExecConstraints(resultRelInfo, slot, estate, mtstate);
+
+		// partition check
+
+		tuples[i] = tuple;
+	}
+
+	// M0
+	Assert(onconflict == ONCONFLICT_NOTHING);
+
+	// Send conflict check in batches
+	if (onconflict != ONCONFLICT_NONE && resultRelInfo->ri_NumIndices > 0)
+	{
+		/* Perform a speculative insertion. */
+		//uint32			specToken;
+		List		   *arbiterIndexes;
+
+		arbiterIndexes = resultRelInfo->ri_onConflictArbiterIndexes;
+
+
+		for (int i = 0; i < curBatchSize; ++i)
+		{
+			bool			specConflict;
+			ItemPointerData conflictTid;
+
+			TupleTableSlot* slot = slots[i];
+			// TODO this should be in batches
+			if (!ExecCheckIndexConstraints(slot, estate, &conflictTid,
+										   arbiterIndexes))
+			{
+				/* committed conflict tuple found */
+				if (onconflict == ONCONFLICT_UPDATE)
+				{
+					Assert(false);
+				}
+				else
+				{
+					/*
+					 * In case of ON CONFLICT DO NOTHING, do nothing. However,
+					 * verify that the tuple is visible to the executor's MVCC
+					 * snapshot at higher isolation levels.
+					 */
+					Assert(onconflict == ONCONFLICT_NOTHING);
+					if (!IsYBRelation(resultRelationDesc))
+					{
+						// YugaByte does not use Postgres transaction control
+						// code.
+						ExecCheckTIDVisible(estate, resultRelInfo,
+											&conflictTid);
+					}
+					InstrCountTuples2(&mtstate->ps, 1);
+					result = NULL;
+					goto conflict_resolved;
+				}
+			}
+
+			// no conflict TODO in batches
+			if (IsYBRelation(resultRelationDesc))
+			{
+				/*
+				 * YugaByte handles transaction-control internally, so speculative token are not being
+				 * locked and released in this call.
+				 * TODO(Mikhail) Verify the YugaByte transaction support works properly for on-conflict.
+				 */
+				newId = YBCHeapInsert(slot, tuple, estate);
+
+				/* insert index entries for tuple */
+				recheckIndexes = ExecInsertIndexTuples(slot, tuple,
+													   estate, true, &specConflict,
+													   arbiterIndexes);
+			}
+			else {
+				Assert(false);
+			}
+		}
+	}
+	else {
+		// insert normally no on conflict
+		for (int i = 0; i < curBatchSize; ++i)
+		{
+			TupleTableSlot* slot = slots[i];
+			if (IsYBRelation(resultRelationDesc))
+			{
+				MemoryContext oldContext = MemoryContextSwitchTo(GetPerTupleMemoryContext(estate));
+				newId = YBCHeapInsert(slot, tuple, estate);
+
+				/* insert index entries for tuple */
+				if (YBCRelInfoHasSecondaryIndices(resultRelInfo))
+					recheckIndexes = ExecInsertIndexTuples(slot, tuple, estate, false, NULL, NIL);
+				MemoryContextSwitchTo(oldContext);
+			}
+			else {
+				Assert(false);
+			}
+		}
+	}
+
+	// Work?
+	for (int i = 0; i < curBatchSize; ++i) 
+	{
+		TupleTableSlot* slot = slots[i];
+		HeapTuple tuple = tuples[i];
+		YbPostProcessDml(CMD_INSERT,
+					 resultRelationDesc,
+					 slot->tts_tupleDescriptor,
+					 tuple);
+
+		// ?? 
+		if (canSetTag)
+		{
+			(estate->es_processed)++;
+			estate->es_lastoid = newId;
+			setLastTid(&(tuple->t_self));
+		}
+
+		// Trigers
+
+		// With Check
+
+		// Exec Returning
+	}
+
+	list_free(recheckIndexes);
+
+	// TODO
+conflict_resolved:
+	if (estate->yb_conflict_slot != NULL) {
+		ExecDropSingleTupleTableSlot(estate->yb_conflict_slot);
+		estate->yb_conflict_slot = NULL;
+	}
+	return result;
+}
+
 
 /* ----------------------------------------------------------------
  *		ExecInsert
@@ -2433,6 +2639,164 @@ tupconv_map_for_subplan(ModifyTableState *mtstate, int whichplan)
 }
 
 /* ----------------------------------------------------------------
+ *	   ExecModifyTable in batch
+ *
+ *		Perform table modifications as required, and return RETURNING results
+ *		if needed.
+ * ----------------------------------------------------------------
+ */
+static TupleTableSlot *
+ExecBatchModifyTable(PlanState *pstate)
+{
+	ModifyTableState *node = castNode(ModifyTableState, pstate);
+	PartitionTupleRouting *proute = node->mt_partition_tuple_routing;
+	EState	   *estate = node->ps.state;
+	CmdType		operation = node->operation;
+	ResultRelInfo *saved_resultRelInfo;
+	ResultRelInfo *resultRelInfo;
+	PlanState  *subplanstate;
+	JunkFilter *junkfilter;
+	TupleTableSlot *slot;
+	TupleTableSlot *planSlot;
+	//ItemPointer tupleid;
+	//ItemPointerData tuple_ctid;
+	HeapTupleData oldtupdata;
+	HeapTuple	oldtuple;
+
+	CHECK_FOR_INTERRUPTS();
+
+	/*
+	 * This should NOT get called during EvalPlanQual; we should have passed a
+	 * subplan tree to EvalPlanQual, instead.  Use a runtime test not just
+	 * Assert because this condition is easy to miss in testing.  (Note:
+	 * although ModifyTable should not get executed within an EvalPlanQual
+	 * operation, we do have to allow it to be initialized and shut down in
+	 * case it is within a CTE subplan.  Hence this test must be here, not in
+	 * ExecInitModifyTable.)
+	 */
+	if (estate->es_epqTuple != NULL)
+		elog(ERROR, "ModifyTable should not be called during EvalPlanQual");
+
+	/*
+	 * If we've already completed processing, don't try to do more.  We need
+	 * this test because ExecPostprocessPlan might call us an extra time, and
+	 * our subplan's nodes aren't necessarily robust against being called
+	 * extra times.
+	 */
+	if (node->mt_done)
+		return NULL;
+
+	// /*
+	//  * On first call, fire BEFORE STATEMENT triggers before proceeding.
+	//  */
+	// if (node->fireBSTriggers)
+	// {
+	// 	fireBSTriggers(node);
+	// 	node->fireBSTriggers = false;
+	// }
+
+	/* Preload local variables */
+	resultRelInfo = node->resultRelInfo + node->mt_whichplan;
+	subplanstate = node->mt_plans[node->mt_whichplan];
+	junkfilter = resultRelInfo->ri_junkFilter;
+
+	/*
+	 * es_result_relation_info must point to the currently active result
+	 * relation while we are within this ModifyTable node.  Even though
+	 * ModifyTable nodes can't be nested statically, they can be nested
+	 * dynamically (since our subplan could include a reference to a modifying
+	 * CTE).  So we have to save and restore the caller's value.
+	 */
+	saved_resultRelInfo = estate->es_result_relation_info;
+
+	estate->es_result_relation_info = resultRelInfo;
+
+	TupleTableSlot* slots[INSERT_BATCH_SIZE];
+	TupleTableSlot* planSlots[INSERT_BATCH_SIZE];
+
+	/*
+	 * Fetch rows from subplan(s), and execute the required table modification
+	 * for each row.
+	 */
+	for (;;)
+	{
+		/*
+		 * Reset the per-output-tuple exprcontext.  This is needed because
+		 * triggers expect to use that context as workspace.  It's a bit ugly
+		 * to do this below the top level of the plan, however.  We might need
+		 * to rethink this later.
+		 */
+		ResetPerTupleExprContext(estate);
+
+		int i = 0;
+		// Collect rows in batches
+		for (i = 0; i < INSERT_BATCH_SIZE; ++i)
+		{
+			planSlot = ExecProcNode(subplanstate);
+
+			// stop if no slot found
+			if (TupIsNull(planSlot))
+				break;
+
+			//
+			EvalPlanQualSetSlot(&node->mt_epqstate, planSlot);
+			slot = planSlot;
+
+			slots[i] = slot;
+			planSlots[i] = planSlot;
+
+			//
+		}
+
+		// exit early nothing found
+		if (i == 0)
+			break;
+
+		const Size curBatchSize = i;
+		// Collected a batch in buffer and insert them in batches
+		switch (operation)
+		{
+			case CMD_INSERT:
+				if (!proute)
+				{
+					ereport(WARNING, (errmsg("Executing INSERT in "
+											 "batches")));
+					ExecBatchedInsert(node, slots, planSlots, estate,
+									  node->canSetTag, curBatchSize);
+				}
+				//
+				break;
+			//
+			default:
+				elog(ERROR, "unknown operation");
+				break;
+		}
+
+		/*
+		 * If we got a RETURNING result, return it to caller.  We'll continue
+		 * the work on next call.
+		 */
+		// if (slot)
+		// {
+		// 	estate->es_result_relation_info = saved_resultRelInfo;
+		// 	return slot;
+		// }
+	}
+
+	/* Restore es_result_relation_info before exiting */
+	estate->es_result_relation_info = saved_resultRelInfo;
+
+	/*
+	 * We're done, but fire AFTER STATEMENT triggers before exiting.
+	 */
+	fireASTriggers(node);
+
+	node->mt_done = true;
+
+	return NULL;
+}
+
+/* ----------------------------------------------------------------
  *	   ExecModifyTable
  *
  *		Perform table modifications as required, and return RETURNING results
@@ -2778,7 +3142,7 @@ ExecInitModifyTable(ModifyTable *node, EState *estate, int eflags)
 	mtstate = makeNode(ModifyTableState);
 	mtstate->ps.plan = (Plan *) node;
 	mtstate->ps.state = estate;
-	mtstate->ps.ExecProcNode = ExecModifyTable;
+	mtstate->ps.ExecProcNode = yb_enable_batched_inserts ? ExecBatchModifyTable : ExecModifyTable;
 
 	mtstate->operation = operation;
 	mtstate->canSetTag = node->canSetTag;
