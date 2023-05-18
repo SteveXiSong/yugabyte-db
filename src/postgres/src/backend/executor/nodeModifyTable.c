@@ -69,6 +69,7 @@
 #include "nodes/nodes.h"
 #include "nodes/plannodes.h"
 #include "storage/bufmgr.h"
+#include "storage/itemptr.h"
 #include "storage/lmgr.h"
 #include "utils/builtins.h"
 #include "utils/elog.h"
@@ -388,16 +389,17 @@ ExecBatchedInsert(ModifyTableState *mtstate,
 
 		arbiterIndexes = resultRelInfo->ri_onConflictArbiterIndexes;
 
+		ItemPointerData* conflictTids = palloc(curBatchSize * sizeof(ItemPointerData));
+			
 		// F - conflict, T - no conflict
 		bool* conflictMap = palloc(curBatchSize * sizeof(bool));
 		for (int i = 0; i < curBatchSize; ++i)
 		{
 			ItemPointerData conflictTid;
 			TupleTableSlot* slot = slots[i];
-
 			conflictMap[i] = ExecCheckIndexConstraints(slot, estate, &conflictTid,
 										   arbiterIndexes);
-
+			conflictTids[i] = conflictTid;
 		}
 
 		for (int i = 0; i < curBatchSize; ++i)
@@ -446,11 +448,18 @@ ExecBatchedInsert(ModifyTableState *mtstate,
 					//goto conflict_resolved;
 
 					// conflict resolved:
-					if (slots[i] != NULL)
-					{
-						ExecDropSingleTupleTableSlot(slots[i]);
-						slots[i] = NULL;
-					}
+					// if (slots[i] != NULL)
+					// {
+					// 	ExecDropSingleTupleTableSlot(slots[i]);
+					// 	slots[i] = NULL;
+					// }
+				}
+
+				// drop the slot
+				if (estate->yb_conflict_slot != NULL)
+				{
+					ExecDropSingleTupleTableSlot(estate->yb_conflict_slot);
+					estate->yb_conflict_slot = NULL;
 				}
 				continue;
 			}
@@ -529,6 +538,7 @@ ExecBatchedInsert(ModifyTableState *mtstate,
 	list_free(recheckIndexes);
 
 	// TODO
+
 //conflict_resolved:
 	if (estate->yb_conflict_slot != NULL) {
 		ExecDropSingleTupleTableSlot(estate->yb_conflict_slot);

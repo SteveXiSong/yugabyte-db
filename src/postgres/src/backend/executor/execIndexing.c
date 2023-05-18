@@ -110,7 +110,9 @@
 #include "access/xact.h"
 #include "catalog/index.h"
 #include "executor/executor.h"
+#include "executor/tuptable.h"
 #include "nodes/nodeFuncs.h"
+#include "storage/itemptr.h"
 #include "storage/lmgr.h"
 #include "utils/tqual.h"
 
@@ -637,6 +639,137 @@ ExecDeleteIndexTuplesOptimized(Datum ybctid,
 
 	/* Drop the temporary slot */
 	ExecDropSingleTupleTableSlot(slot);
+}
+
+
+// Do it in batch way
+bool
+ExecBatchCheckIndexConstraints(TupleTableSlot **slots,
+						  EState *estate, ItemPointerData* conflictTids,
+						  List *arbiterIndexes,
+						  Size batchSize)
+{
+	ResultRelInfo *resultRelInfo;
+	int			i;
+	int			numIndices;
+	RelationPtr relationDescs;
+	Relation	heapRelation;
+	IndexInfo **indexInfoArray;
+	ExprContext *econtext;
+	Datum		values[INDEX_MAX_KEYS];
+	bool		isnull[INDEX_MAX_KEYS];
+	ItemPointerData invalidItemPtr;
+	bool		checkedIndex = false;
+
+	for (int i = 0; i < batchSize; ++i)
+	{
+		ItemPointerSetInvalid(&conflictTids[i]);
+	}
+	ItemPointerSetInvalid(&invalidItemPtr);
+
+	/*
+	 * Get information from the result relation info structure.
+	 */
+	resultRelInfo = estate->es_result_relation_info;
+	numIndices = resultRelInfo->ri_NumIndices;
+	relationDescs = resultRelInfo->ri_IndexRelationDescs;
+	indexInfoArray = resultRelInfo->ri_IndexRelationInfo;
+	heapRelation = resultRelInfo->ri_RelationDesc;
+
+	/*
+	 * We will use the EState's per-tuple context for evaluating predicates
+	 * and index expressions (creating it if it's not already there).
+	 */
+	econtext = GetPerTupleExprContext(estate);
+
+	for (int i = 0; i < batchSize; ++i)
+	{
+		TupleTableSlot* slot = slots[i];
+		ItemPointerData *conflictTid = &conflictTids[i];
+
+		/* Arrange for econtext's scan tuple to be the tuple under test */
+		econtext->ecxt_scantuple = slot;
+
+		/*
+		 * For each index, form index tuple and check if it satisfies the
+		 * constraint.
+		 */
+		for (i = 0; i < numIndices; i++)
+		{
+			Relation   indexRelation = relationDescs[i];
+			IndexInfo *indexInfo;
+			bool	   satisfiesConstraint;
+
+			if (indexRelation == NULL)
+				continue;
+
+			indexInfo = indexInfoArray[i];
+			Assert(indexInfo->ii_ReadyForInserts ==
+				   indexRelation->rd_index->indisready);
+
+			if (!indexInfo->ii_Unique && !indexInfo->ii_ExclusionOps)
+				continue;
+
+			/* If the index is marked as read-only, ignore it */
+			if (!indexInfo->ii_ReadyForInserts)
+				continue;
+
+			/* When specific arbiter indexes requested, only examine them */
+			if (arbiterIndexes != NIL &&
+				!list_member_oid(arbiterIndexes,
+								 indexRelation->rd_index->indexrelid))
+				continue;
+
+			if (!indexRelation->rd_index->indimmediate)
+				ereport(
+					ERROR,
+					(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+					 errmsg("ON CONFLICT does not support deferrable unique "
+							"constraints/exclusion constraints as arbiters"),
+					 errtableconstraint(heapRelation, RelationGetRelationName(
+														  indexRelation))));
+
+			checkedIndex = true;
+
+			/* Check for partial index */
+			// if (indexInfo->ii_Predicate != NIL)
+			// {
+			// 	ExprState  *predicate;
+
+			// 	/*
+			// 	 * If predicate state not set up yet, create it (in the estate's
+			// 	 * per-query context)
+			// 	 */
+			// 	predicate = indexInfo->ii_PredicateState;
+			// 	if (predicate == NULL)
+			// 	{
+			// 		predicate = ExecPrepareQual(indexInfo->ii_Predicate,
+			// estate); 		indexInfo->ii_PredicateState = predicate;
+			// 	}
+
+			// 	/* Skip this index-update if the predicate isn't satisfied */
+			// 	if (!ExecQual(predicate, econtext))
+			// 		continue;
+			// }
+
+			/*
+			 * FormIndexDatum fills in its values and isnull parameters with the
+			 * appropriate values for the column(s) of the index.
+			 */
+			FormIndexDatum(indexInfo, slot, estate, values, isnull);
+
+			satisfiesConstraint = check_exclusion_or_unique_constraint(
+				heapRelation, indexRelation, indexInfo, &invalidItemPtr, values,
+				isnull, estate, false, CEOUC_WAIT, true, conflictTid);
+			if (!satisfiesConstraint)
+				return false;
+		}
+	}
+
+	if (arbiterIndexes != NIL && !checkedIndex)
+		elog(ERROR, "unexpected failure to find arbiter index");
+
+	return true;
 }
 
 /* ----------------------------------------------------------------
