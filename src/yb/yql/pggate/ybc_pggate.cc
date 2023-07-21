@@ -88,9 +88,12 @@ DEFINE_UNKNOWN_bool(ysql_disable_server_file_access, false,
 
 DEFINE_NON_RUNTIME_bool(ysql_enable_profile, false, "Enable PROFILE feature.");
 
-DEFINE_NON_RUNTIME_bool(ysql_catalog_preload_additional_tables, false,
-            "If true, YB catalog preloads additional tables upon "
-            "connection creation and cache refresh.");
+DEPRECATE_FLAG(bool, ysql_catalog_preload_additional_tables, "07_2023");
+
+DEFINE_NON_RUNTIME_string(
+    ysql_catalog_preload_additional_table_list, "",
+    "The list of catalog tables that YB catalog preloads additionally upon "
+    "connection creation and cache refresh. Catalog table names start with pg_.");
 
 DEFINE_NON_RUNTIME_bool(ysql_disable_global_impact_ddl_statements, false,
             "If true, disable global impact ddl statements in per database catalog "
@@ -1409,27 +1412,29 @@ uint64_t YBCGetSharedAuthKey() {
 
 const YBCPgGFlagsAccessor* YBCGetGFlags() {
   static YBCPgGFlagsAccessor accessor = {
-      .log_ysql_catalog_versions                = &FLAGS_log_ysql_catalog_versions,
-      .ysql_catalog_preload_additional_tables   = &FLAGS_ysql_catalog_preload_additional_tables,
-      .ysql_disable_index_backfill              = &FLAGS_ysql_disable_index_backfill,
-      .ysql_disable_server_file_access          = &FLAGS_ysql_disable_server_file_access,
-      .ysql_enable_reindex                      = &FLAGS_ysql_enable_reindex,
-      .ysql_max_read_restart_attempts           = &FLAGS_ysql_max_read_restart_attempts,
-      .ysql_max_write_restart_attempts          = &FLAGS_ysql_max_write_restart_attempts,
+      .log_ysql_catalog_versions = &FLAGS_log_ysql_catalog_versions,
+      //.ysql_catalog_preload_additional_tables   = &FLAGS_ysql_catalog_preload_additional_tables,
+      .ysql_disable_index_backfill = &FLAGS_ysql_disable_index_backfill,
+      .ysql_disable_server_file_access = &FLAGS_ysql_disable_server_file_access,
+      .ysql_enable_reindex = &FLAGS_ysql_enable_reindex,
+      .ysql_max_read_restart_attempts = &FLAGS_ysql_max_read_restart_attempts,
+      .ysql_max_write_restart_attempts = &FLAGS_ysql_max_write_restart_attempts,
       .ysql_num_databases_reserved_in_db_catalog_version_mode =
           &FLAGS_ysql_num_databases_reserved_in_db_catalog_version_mode,
-      .ysql_output_buffer_size                  = &FLAGS_ysql_output_buffer_size,
-      .ysql_sequence_cache_minval               = &FLAGS_ysql_sequence_cache_minval,
-      .ysql_session_max_batch_size              = &FLAGS_ysql_session_max_batch_size,
-      .ysql_sleep_before_retry_on_txn_conflict  = &FLAGS_ysql_sleep_before_retry_on_txn_conflict,
-      .ysql_colocate_database_by_default        = &FLAGS_ysql_colocate_database_by_default,
-      .ysql_ddl_rollback_enabled                = &FLAGS_ysql_ddl_rollback_enabled,
-      .ysql_enable_read_request_caching         = &FLAGS_ysql_enable_read_request_caching,
-      .ysql_enable_profile                      = &FLAGS_ysql_enable_profile,
-      .ysql_disable_global_impact_ddl_statements =
-          &FLAGS_ysql_disable_global_impact_ddl_statements,
-      .ysql_minimal_catalog_caches_preload      = &FLAGS_ysql_minimal_catalog_caches_preload,
+      .ysql_output_buffer_size = &FLAGS_ysql_output_buffer_size,
+      .ysql_sequence_cache_minval = &FLAGS_ysql_sequence_cache_minval,
+      .ysql_session_max_batch_size = &FLAGS_ysql_session_max_batch_size,
+      .ysql_sleep_before_retry_on_txn_conflict = &FLAGS_ysql_sleep_before_retry_on_txn_conflict,
+      .ysql_colocate_database_by_default = &FLAGS_ysql_colocate_database_by_default,
+      .ysql_ddl_rollback_enabled = &FLAGS_ysql_ddl_rollback_enabled,
+      .ysql_enable_read_request_caching = &FLAGS_ysql_enable_read_request_caching,
+      .ysql_enable_profile = &FLAGS_ysql_enable_profile,
+      .ysql_disable_global_impact_ddl_statements = &FLAGS_ysql_disable_global_impact_ddl_statements,
+      .ysql_minimal_catalog_caches_preload = &FLAGS_ysql_minimal_catalog_caches_preload,
+      .ysql_catalog_preload_additional_table_list =
+          FLAGS_ysql_catalog_preload_additional_table_list.c_str(),
   };
+  LOG(WARNING) << "### origina: " << FLAGS_ysql_catalog_preload_additional_table_list;
   return &accessor;
 }
 

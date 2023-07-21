@@ -2616,6 +2616,46 @@ YbUpdateRelationCache(YbRunWithPrefetcherContext *ctx)
 	return status;
 }
 
+void YbParsePreloadAdditionalCatalogList(YbPFetchTable* tables, int* count) {
+	const char* list = YBCGetGFlags()->ysql_catalog_preload_additional_table_list;
+	int cnt = 0;
+
+	if (list == NULL)
+		return;
+
+	elog(WARNING, "### Got flag: %s", list);
+
+	// to lower and clean spaces
+	char* preload_cat_list = (char *)palloc(strlen(list));
+	int d = 0, s = 0;
+	char c;
+	while((c = list[s]) != '\0')
+	{
+		if (c != ' ')
+			preload_cat_list[d++] = tolower(c);
+		++s;
+	}
+	preload_cat_list[d] = '\0';
+	if (d != 0) 
+		++cnt;
+
+	char* preload_catalog_names [YB_PFETCH_TABLE_LAST - YB_PFETCH_TABLE_FIRST];
+	char* catalog_token = strtok(preload_cat_list, ",");
+
+	int i = 0;
+	while (catalog_token != NULL)
+	{
+		strcpy(preload_catalog_names[i++], catalog_token);
+		catalog_token = strtok(NULL, ",");
+	}
+
+	for (int i = 0; i < sizeof(preload_catalog_names)/sizeof(char*); ++i) {
+		if (preload_catalog_names[i] != NULL)
+			elog(WARNING, "### : %s", preload_catalog_names[i]);
+	}
+	elog(WARNING, "### : end");
+}
+
 static YBCStatus
 YbPreloadRelCacheImpl(YbRunWithPrefetcherContext *ctx)
 {
@@ -2644,7 +2684,12 @@ YbPreloadRelCacheImpl(YbRunWithPrefetcherContext *ctx)
 	YbTryRegisterCatalogVersionTableForPrefetching();
 	YbRegisterTables(prefetcher, core_tables, lengthof(core_tables));
 
-	if (*YBCGetGFlags()->ysql_catalog_preload_additional_tables)
+	YbPFetchTable* tables = NULL;
+	int count;
+	YbParsePreloadAdditionalCatalogList(tables, &count);
+
+	//if (*YBCGetGFlags()->ysql_catalog_preload_additional_tables)
+	if (false)
 	{
 		static const YbPFetchTable tables[] = {
 			YB_PFETCH_TABLE_PG_AMOP,
@@ -7313,7 +7358,7 @@ load_relcache_init_file(bool shared)
 	 * below.
 	 */
 	if (IsYugaByteEnabled() &&
-		*YBCGetGFlags()->ysql_catalog_preload_additional_tables &&
+		YBCGetGFlags()->ysql_catalog_preload_additional_table_list &&
 		!YBIsDBCatalogVersionMode())
 		return false;
 
